@@ -1,0 +1,14 @@
+{
+  "name": "timetable-api",
+  "version": "1.0.0",
+  "description": "A simple timetable API to lookup modules and rooms",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Alexandros Christou",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.2"
+  }
+}

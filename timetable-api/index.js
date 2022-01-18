@@ -149,10 +149,10 @@ app.post('/timetable/rooms', (req, res) => {
         res.status(409).send(); // resource already exists
     } else {
         
-        timetable_data.rooms.push(posted_rooms); // add to local model
+        timetable_data.room.push(posted_rooms); // add to local model
         res.status(200)
             .setHeader('content-type', 'application/json')
-            .send({ message: "Room added"});
+            .send({ message: "Module added"});
     }
 });
 

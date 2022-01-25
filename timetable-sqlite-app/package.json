@@ -1,0 +1,15 @@
+{
+  "name": "timetable-sqlite-app",
+  "version": "1.0.0",
+  "description": "Demonstrating how to realize the Timetable API backed with SQLite",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Alexandros Christou",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.2",
+    "sqlite3": "^4.2.0"
+  }
+}

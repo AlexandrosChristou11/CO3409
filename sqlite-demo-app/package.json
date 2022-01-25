@@ -1,0 +1,23 @@
+{
+  "name": "timetable-sqlite-app",
+  "version": "1.0.0",
+  "description": "A project demonstrating SQLite in NodeJS",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexandrosChristou11/CO3409.git"
+  },
+  "author": "Alexandros Christou",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AlexandrosChristou11/CO3409/issues"
+  },
+  "homepage": "https://github.com/AlexandrosChristou11/CO3409#readme",
+  "dependencies": {
+    "express": "^4.17.2",
+    "sqlite3": "^4.2.0"
+  }
+}

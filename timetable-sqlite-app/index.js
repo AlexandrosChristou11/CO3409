@@ -15,7 +15,7 @@ let db = new sqlite3.Database('./db/timetable.db', (err)=> {
 app.use(express.json());
 
 
-// GET: {local}/timetable/module
+// GET: {local}/timetable/modules
 app.get('/timetable/modules', (req,res)=> {
     var modules = [];
     db.all('SELECT id, code, name FROM modules', (err, rows)=> {

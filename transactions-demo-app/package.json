@@ -1,0 +1,16 @@
+{
+  "name": "transactions-demo-app",
+  "version": "1.0.0",
+  "description": "Demonstrating the use of transactions",
+  "main": "init.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "alexandros christou",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.2",
+    "sqlite3": "^4.2.0",
+    "sqlite3-transactions": "^0.0.5"
+  }
+}

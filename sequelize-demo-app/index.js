@@ -222,8 +222,8 @@ app.put('/timetable/module/id', (req,res)=> {
                         .send({message: `Module coded updated`}); // body is JSON
                     } )
                 .catch( e => {
-                    .setHeader('content-type', 'application/json')
-                    .send({message: `Session updated`, session: s}); // body is JSON
+                    res.setHeader('content-type', 'application/json')
+                    res.send({message: `Session updated`, session: s}); // body is JSON
                 } )
             })
 

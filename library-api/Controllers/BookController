@@ -1,0 +1,96 @@
+// const { Sequelize, DataTypes } = require('sequelize'); // Import sequelize ..
+
+
+// const sequelize = new Sequelize({
+//     dialect: 'sqlite',
+//     storage: 'db/library.db'
+// })
+
+const sqlite3 = require('sqlite3').verbose();       // include sqlite library ..
+
+
+let db = new sqlite3.Database('./db/library.db', (err)=> {
+    if (err){
+        return console.log(err.message);
+    }
+    console.log('Connected to the file-based SQlite database ..');
+})
+
+
+
+// -------------------
+//      API CALLS:
+// -------------------
+
+// ---------
+//  BOOK:
+// ---------
+//app.post('/library/book',
+
+// {POST}: localhost:3000/library/book
+const AddNewBook = (req, res,) => {
+    const posted_book = req.body; // submitted module - picked from body
+    console.log(posted_book);
+ 
+
+    if( !posted_book || !posted_book.Authors ||  !posted_book.Title ||  !posted_book.ISBN ||  !posted_book.Year
+        ||  !posted_book.Loanable ||  !posted_book.Quantity ) { 
+        res.status(422) // bad request
+            .setHeader('content-type', 'application/json')
+            .send({ error: `Invalid Book format !!`});
+
+    } else {
+        
+        db.run( 'INSERT INTO Books (Authors, Title, ISBN, Year, Loanable, Quantity) VALUES (?,?,?,?,?,?)',
+                    [posted_book.Authors, posted_book.Title, posted_book.ISBN, posted_book.Year, posted_book.Loanable, posted_book.Quantity ],
+                     function(error){
+
+                        if (error){
+                            if (error.code == 'SQLITE_CONSTRAINT'){
+                                
+                                res.status(409)
+                                .setHeader('content-type', 'application/json')
+                                //.send({ error: `Book with ISBN ${posted_book.ISBN} already exists. ` })
+                                .send({ error: `Contraint Error | ${error.message}` })
+                            }
+                            else{
+                            res.status(500)
+                            .setHeader('content-type', 'application/json')
+                            .send({ error })
+                             }
+                        }else{
+                            res.status(200)
+                                .setHeader('content-type', 'application/json')
+                                .send({ message: "Book added", id: posted_book.Title, id : this.lastID});
+                        }
+
+                    } );
+
+        
+    }
+};
+
+
+
+// GET: {local}/library/books
+const GetBooksById =  (req,res)=> {
+    var books = [];
+    db.all('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books', (err, rows)=> {
+        if (err){
+            console.error('Problem while querying database: ' + err);
+            res.status(500) // internal server error ..
+            .setHeader('content-type', 'application/json')
+            .send({error: "Problem while querying database"});
+        }
+
+        rows.forEach(row =>
+            books.push({id: row.id, Authors: row.Authors, Title: row.Title, ISBN: row.ISBN, Year: row.Year, Loanable: row.Loanable, Quantity: row.Quantity}));
+        res.status(200)
+            .setHeader('content-type', 'application/json')
+            .send(books);
+
+    });
+
+}
+
+module.exports = {AddNewBook, GetBooks};

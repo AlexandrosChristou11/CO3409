@@ -31,8 +31,10 @@ db.serialize(() => {
 // -----------
 db.serialize(() => {
     // create 'accounts' table if needed
-    db.run(`CREATE TABLE IF NOT EXISTS Student (id INTEGER not null PRIMARY KEY, Name  TEXT not null,
-             YOB INTEGER not null)` ,
+    db.run(`CREATE TABLE IF NOT EXISTS Students (id INTEGER not null PRIMARY KEY AUTOINCREMENT UNIQUE, Name  TEXT not null,
+             YOB INTEGER not null,
+             
+             CHECK (YOB >= 1900 AND YOB <= 2022 ))` ,
     
     [], function (err) {
         if (err) console.log(`error while creating table 'Student': ${err}`)
@@ -47,7 +49,7 @@ db.serialize(() => {
 // -----------
 db.serialize(() => {
     // create 'accounts' table if needed
-    db.run(`CREATE TABLE IF NOT EXISTS Module (CODE TEXT PRIMARY KEY not null, Name TEXT not null)` ,
+    db.run(`CREATE TABLE IF NOT EXISTS Modules (Code TEXT PRIMARY KEY not null UNIQUE, Name TEXT not null)` ,
     
     [], function (err) {
         if (err) console.log(`error while creating table 'Module': ${err}`)
@@ -62,8 +64,8 @@ db.serialize(() => {
 // -----------
 db.serialize(() => {
     // create 'Loan' table if needed
-    db.run(`CREATE TABLE IF NOT EXISTS Loan (
-        BookID INTEGER  not null, StudentID INTEGER  not null, Checkout DATE  not null, Due DATE, Returned BOOLEAN NOT NULL DEFAULT 0,
+    db.run(`CREATE TABLE IF NOT EXISTS Loans (
+        BookID INTEGER  not null, StudentID INTEGER  not null, Checkout DATE , Due DATE, Returned BOOLEAN NOT NULL DEFAULT 0,
         PRIMARY KEY(BookID, StudentID),
         FOREIGN KEY (BookID) 
          REFERENCES Book (id) 
@@ -107,5 +109,14 @@ db.serialize(() => {
         else console.log(`table created: 'Bibliography'`)
     });
 
-
 });
+
+// db.serialize(() => {
+//     // create 'Loan' table if needed
+//     db.run(`DROP TABLE Loan` ,
+    
+//     [], function (err) {
+//         if (err) console.log(`error while deleting table 'students': ${err}`)
+//         else console.log(`table deleted: 'students'`)
+//     });
+// });

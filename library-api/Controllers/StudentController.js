@@ -1,8 +1,8 @@
 const sqlite3 = require('sqlite3').verbose();       // include sqlite library ..
 
 
-let db = new sqlite3.Database('./db/library.db', (err) => {
-    if (err) {
+let db = new sqlite3.Database('./db/library.db', (err)=> {
+    if (err){
         return console.log(err.message);
     }
     console.log('Connected to the file-based SQlite database ..');
@@ -10,30 +10,22 @@ let db = new sqlite3.Database('./db/library.db', (err) => {
 
 const _functions = require('../Generic Methods/GlobalFunctions'); // import the routes
 
-// -------------------
-//      API CALLS:
-// -------------------
-
-// ---------
-//  BOOK:
-// ---------
-//app.post('/library/book',
-
-const AddNewBook = (req, res) => {
-    const posted_book = req.body; // submitted module - picked from body
-    console.log(posted_book);
 
 
-    if (!posted_book || !posted_book.Authors || !posted_book.Title || !posted_book.ISBN || !posted_book.Year
-        || !posted_book.Loanable || !posted_book.Quantity) {
+// {POST}: localhost:3000/library/student/add
+const AddNewStudent = (req, res) => {
+    const posted_student = req.body; // submitted module - picked from body
+
+
+if (!posted_student || !posted_student.Name || !posted_student.YOB || _functions.isBlank(posted_student.Name) || isNaN(posted_student.YOB)) {
         res.status(422) // bad request
             .setHeader('content-type', 'application/json')
-            .send({ error: `Invalid Book format !!` });
+            .send({ error: `Invalid Student format !!` });
 
     } else {
 
-        db.run('INSERT INTO Books (Authors, Title, ISBN, Year, Loanable, Quantity) VALUES (?,?,?,?,?,?)',
-            [posted_book.Authors, posted_book.Title, posted_book.ISBN, posted_book.Year, posted_book.Loanable, posted_book.Quantity],
+        db.run('INSERT INTO Students (Name, YOB) VALUES (?,?)',
+            [posted_student.Name, posted_student.YOB],
             function (error) {
 
                 if (error) {
@@ -41,7 +33,6 @@ const AddNewBook = (req, res) => {
 
                         res.status(409)
                             .setHeader('content-type', 'application/json')
-                            //.send({ error: `Book with ISBN ${posted_book.ISBN} already exists. ` })
                             .send({ error: `Contraint Error | ${error.message}` })
                     }
                     else {
@@ -52,7 +43,7 @@ const AddNewBook = (req, res) => {
                 } else {
                     res.status(200)
                         .setHeader('content-type', 'application/json')
-                        .send({ message: "Book added", id: posted_book.Title, id: this.lastID });
+                        .send({ message: "Student added", id: posted_student.id, Name: posted_student.Name, YOB: posted_student.YOB });
                 }
 
             });
@@ -62,10 +53,11 @@ const AddNewBook = (req, res) => {
 };
 
 
-// GET: {local}/library/books
-const GetBooks = (req, res) => {
+
+// GET: {local}/library/students
+const GetStudents =  (req, res) => {
     var books = [];
-    db.all('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books', (err, rows) => {
+    db.all('SELECT ID, Name, YOB from Students', (err, rows) => {
         if (err) {
             console.error('Problem while querying database: ' + err);
             res.status(500) // internal server error ..
@@ -75,7 +67,7 @@ const GetBooks = (req, res) => {
         }
 
         rows.forEach(row =>
-            books.push({ id: row.id, Authors: row.Authors, Title: row.Title, ISBN: row.ISBN, Year: row.Year, Loanable: row.Loanable, Quantity: row.Quantity }));
+            books.push({ id: row.id, Name: row.Name, YOB: row.YOB }));
         res.status(200)
             .setHeader('content-type', 'application/json')
             .send(books);
@@ -84,11 +76,11 @@ const GetBooks = (req, res) => {
 
 }
 
-// GET: {local}/library/book/ :id
-// app.get('/library/book/:id',
-const GetBooksById = (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?', [id.trim()], (err, rows) => {
+// GET: {local}/library/student/:id
+const GetStudentById =  (req, res) => {
+    const  {id}  = req.params;
+    db.get('SELECT ID, Name, YOB from Students WHERE ID = ?', [id.trim()], (err, rows) => {
+        console.log(`ID: ${id}`);
         if (err) {
             console.error('Problem while querying database: ' + err);
             res.status(500) // internal server error ..
@@ -99,17 +91,17 @@ const GetBooksById = (req, res) => {
         if (isNaN(id) || _functions.isBlank(id)) {
             res.status(422)
                 .setHeader('content-type', 'application/json')
-                .send({ error: "Book id is of invalid format" });
-        } else
-            if (!rows) {
+                .send({ error: "Student id is of invalid format" });
+        } 
+        else if (!rows) {
                 res.status(404)
                     .setHeader('content-type', 'application/json')
-                    .send({ error: "Book with id `${id}` was not found .." });
+                    .send({ error: `Student with id: ${id} was not found ..` });
             }
             else {
                 res.status(200)
                     .setHeader('content-type', 'application/json')
-                    .send({ id: rows.id, Authors: rows.Authors, Title: rows.Title, ISBN: rows.ISBN, Loanable: rows.Loanable, Quantity: rows.Quantity });
+                    .send({ id: rows.id, Name: rows.Name, YOB: rows.YOB });
             }
 
     });
@@ -117,39 +109,36 @@ const GetBooksById = (req, res) => {
 }
 
 
-// GET: {local}/library/book?title= {title}
-//app.get('/library/book', 
+// GET: {local}/library/student?Name= {name}
+const GetStudentByNameQuery = (req, res) => {
+    let name = req.query.Name;      // extract 'name' from request
+    let param = '%' + name + '%';
+    var students = [];
+    db.all('SELECT ID, Name, YOB from Students WHERE Name LIKE ?', param, (err, rows) => {
 
-const GetBookByTitleQuery = (req, res) => {
-    let title = req.query.Title;      // extract 'title' from request
-    let param = '%' + title + '%';
-    var books = [];
-    db.all('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE Title LIKE ?', param, (err, rows) => {
-
-        console.log(`PARAMETER TITLE: ${title}`);
         if (err) {
             console.error('Problem while querying database: ' + err);
             res.status(500) // internal server error ..
                 .setHeader('content-type', 'application/json')
                 .send({ error: "Problem while querying database" });
         }
-        else if (_functions.isBlank(title)) {
+        else if (_functions.isBlank(name)) {
             res.status(422)
                 .setHeader('content-type', 'application/json')
-                .send({ error: `Book Title ${title} is of invalid format` });
+                .send({ error: `Student name is of invalid format` });
         }
         else if (rows.length == 0) {
             res.status(404)
                 .setHeader('content-type', 'application/json')
-                .send({ error: `Book with Title ${title} was not found ..` });
+                .send({ error: `Student with name: ${name},  was not found ..` });
         }
         else {
             rows.forEach(row =>
-                books.push({ id: row.id, Authors: row.Authors, Title: row.Title, ISBN: row.ISBN, Year: row.Year, Loanable: row.Loanable, Quantity: row.Quantity }));
+                students.push({ id: row.id, Name: row.Name, YOB: row.YOB,  }));
 
             res.status(200)
                 .setHeader('content-type', 'application/json')
-                .send(books);
+                .send(students);
         }
 
     });
@@ -158,20 +147,17 @@ const GetBookByTitleQuery = (req, res) => {
 }
 
 
-
-// PUT: {local}/library/book/edit/{:id}
-//app.put('/library/book/edit/:id', 
-const EditBook = (req, res) => {
+// PUT: {local}/library/student/edit/{:id}
+const EditStudent = (req, res) => {
     const { id } = req.params; // get id from params
-    const posted_book = req.body;           // submitted book
+    const posted_student = req.body;           // submitted book
 
     if (!id || _functions.isBlank(id) || isNaN(id)) {
         res.status(422)
             .setHeader('content-type', 'application/json')
             .send({ error: `Id is of invalid format` }); // resource not found
     } else {
-        db.get(`SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?`, [id], (err, row) => {
-
+        db.get(`SELECT ID, Name, YOB from Students where ID=?`, [id], (err, row) => {
 
             if (err) {
                 res.status(500)
@@ -179,42 +165,33 @@ const EditBook = (req, res) => {
                     .send({ error: "Server error: " + err });
             }
             else {
-
-                if ((posted_book.Quantity != null && (posted_book.Quantity <= row.Quantity || isNaN(posted_book.Quantity)))) {
-                    res.status(422)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: `Invalid value of Quantity` }); // resource not found
-                }
-                else if ((posted_book.Authors && _functions.isBlank(posted_book.Authors)) ||
-                    (posted_book.Title && _functions.isBlank(posted_book.Title)) ||
-                    (posted_book.Year && _functions.isBlank(posted_book.Year)) ||
-                    (posted_book.Loanable && _functions.isBlank(posted_book.Loanable) || posted_book.Loanable != false && posted_book.Loanable != true)) {
+            
+                if ((posted_student.Name && _functions.isBlank(posted_student.Name)) ||
+                    (posted_student.YOB && _functions.isBlank(posted_student.YOB))) {
                     res.status(422)
                         .setHeader('content-type', 'application/json')
                         .send({ error: `Invalid structure of JSON Parameters` }); // resource not found
                 }
 
 
-                else if (!row) { // true if 'book' not set
+                else if (!row) { // true if 'student' not set
                     res.status(404)
                         .setHeader('content-type', 'application/json')
-                        .send({ error: "Book not found for id: " + id }); // resource not found
+                        .send({ error: "Student not found for id: " + id }); // resource not found
                 }
-                else { // book found, let's update it
+                else { // student found, let's update it
 
-                    const parameters = [posted_book.Authors ?? row.Authors,
-                    posted_book.Title ?? row.Title,
-                    posted_book.ISBN ?? row.ISBN,
-                    posted_book.Year ?? row.Year,
-                    posted_book.Quantity ?? row.Quantity,
+                    const parameters = [
+                        posted_student.Name ?? row.Name,
+                        posted_student.YOB ?? row.YOB,
                         id];
 
-                    db.run(`UPDATE Books SET Authors = ?, Title = ?, ISBN = ?, Year = ?, Quantity = ? WHERE ID=?`, parameters, (err) => {
+                    db.run(`UPDATE Students SET Name = ?, YOB = ? WHERE ID=?`, parameters, (err) => {
                         if (err) {
                             if (err.code === 'SQLITE_CONSTRAINT') {
                                 res.status(409) // resource already exists
                                     .setHeader('content-type', 'application/json')
-                                    .send({ error: `Constraint error: ${err.message}` });
+                                    .send({ error: `Constraint error: ${err}` });
                             } else { // other server-side error
                                 res.status(500)
                                     .setHeader('content-type', 'application/json')
@@ -223,7 +200,7 @@ const EditBook = (req, res) => {
                         } else {
                             res.status(200)
                                 .setHeader('content-type', 'application/json')
-                                .send({ message: `Book with id ${id} was updated!` });
+                                .send({ message: `Student with id ${id} was updated!` });
                         }
                     });
                 }
@@ -233,4 +210,5 @@ const EditBook = (req, res) => {
 };
 
 
-module.exports = { AddNewBook, GetBooks, GetBooksById, GetBookByTitleQuery, EditBook };
+
+module.exports = {AddNewStudent, GetStudents, GetStudentById, GetStudentByNameQuery, EditStudent};

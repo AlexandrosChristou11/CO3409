@@ -187,6 +187,7 @@ const GetLoans = (req, res) => {
 
 }
 
+// https://stackoverflow.com/questions/15128849/using-multiple-parameters-in-url-in-express
 
 // GET: {local}/library/loans/ :id / :loanable?
 const GetLoansByBookId = (req, res) => {

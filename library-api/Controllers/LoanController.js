@@ -8,6 +8,7 @@ let db = new sqlite3.Database('./db/library.db', sqlite3.OPEN_READWRITE | sqlite
     console.log('Connected to the file-based SQlite database ..');
 })
 
+const e = require('express');
 const _functions = require('../Generic Methods/GlobalFunctions'); // import the routes
 
 
@@ -35,7 +36,7 @@ const AddNewLoan = (req, res) => {
 
     } else {
 
-        console.log(`BOOK ID: ${posted_loan.BookID} | STUDENT ID: ${posted_loan.StudentID} | Due: ${posted_loan.Due}` )
+        console.log(`BOOK ID: ${posted_loan.BookID} | STUDENT ID: ${posted_loan.StudentID} | Due: ${posted_loan.Due}`)
         tdb.beginTransaction(async function (err, transaction) { // BEGIN TRANSACTION
 
 
@@ -43,10 +44,11 @@ const AddNewLoan = (req, res) => {
             // Check Due (date) format
             if (dateDue >= currentDate) {
                 const diffTime = Math.abs(dateDue) - currentDate;
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 if (diffDays > 90) {
                     transaction.rollback((err) => { // ROLLBACK
-                        if (err) console.log(`error: ${err}`)});
+                        if (err) console.log(`error: ${err}`)
+                    });
 
                     res.status(422) // bad request
                         .setHeader('content-type', 'application/json')
@@ -85,7 +87,7 @@ const AddNewLoan = (req, res) => {
                                     // Book can be lent .. move to next actions ..
                                     else {
                                         // get the quantity of the already loan books ..
-                                        transaction.get(`SELECT COUNT(BookId) as Count FROM Loans WHERE BookID = ? AND Returned = false`, posted_loan.BookID, (er, c )=> {
+                                        transaction.get(`SELECT COUNT(BookId) as Count FROM Loans WHERE BookID = ? AND Returned = false`, posted_loan.BookID, (er, c) => {
 
                                             if (c.Count >= x.Quantity) {
                                                 transaction.rollback((err) => { // ROLLBACK
@@ -101,7 +103,7 @@ const AddNewLoan = (req, res) => {
                                                     dateDue.toISOString().slice(0, 10),
                                                     currentDate.toISOString().slice(0, 10)
                                                 ];
-                                                transaction.run(`INSERT INTO Loans (BookID, StudentId, Due, Checkout) VALUES(?, ?, ?, ?)`,parameters ,(errorTransaction) => {
+                                                transaction.run(`INSERT INTO Loans (BookID, StudentId, Due, Checkout) VALUES(?, ?, ?, ?)`, parameters, (errorTransaction) => {
                                                     console.log(`TRANSACTION ERROR | ${errorTransaction}`)
                                                     if (errorTransaction) {
                                                         if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
@@ -125,7 +127,7 @@ const AddNewLoan = (req, res) => {
                                                         transaction.commit((errorCommit) => { // COMMIT
                                                             if (err) console.log(`error: ${errorCommit}`);
                                                         });
-        
+
                                                         res.status(200)
                                                             .setHeader('content-type', 'application/json')
                                                             .send({ message: "Loan added", id: this.lastID });
@@ -147,7 +149,8 @@ const AddNewLoan = (req, res) => {
                                 }
 
 
-                                )}
+                                )
+                            }
 
 
                         });
@@ -189,39 +192,217 @@ const GetLoans = (req, res) => {
 
 // https://stackoverflow.com/questions/15128849/using-multiple-parameters-in-url-in-express
 
-// GET: {local}/library/loans/ :id / :loanable?
+
+// TODOO ... :
+// Also make a query on books table and check whether the book exists or not ..
+// GET: {local} /library/loans/all?bookId&loanable (?)
 const GetLoansByBookId = (req, res) => {
-   const {id} = req.params.BookID;
-   const {loanable} = req.params.Loanable;
-   var loans = [];
+    const bookId = req.query.bookId;
+    const Returned = req.query.pending;
 
-    db.get('SELECT BookId, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?', [id.trim()], (err, rows) => {
-        if (err) {
-            console.error('Problem while querying database: ' + err);
-            res.status(500) // internal server error ..
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Problem while querying database" });
-        }
+    var loans = [];
 
-        if (isNaN(id) || _functions.isBlank(id)) {
-            res.status(422)
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Book id is of invalid format" });
-        } else
-            if (!rows) {
+    // bood id is of invalid format ..
+    if (!bookId || _functions.isBlank(bookId)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: "Book id can not be empty .." });
+    } else if (isNaN(bookId)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: "Book id should be an integer .." });
+    } else {
+
+        let id = parseInt(bookId);
+        // check if bood id exist ..
+        db.get('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE WHERE ID=?', [id], (e, x => {
+
+            // No such book exist ..
+            if (!x || id == 0) {
                 res.status(404)
                     .setHeader('content-type', 'application/json')
-                    .send({ error: "Book with id `${id}` was not found .." });
+                    .send({ e: `Book with id ${bookId} does not exist ..` });
             }
+            // book exist -> go find all books that are lent ..
             else {
-                res.status(200)
-                    .setHeader('content-type', 'application/json')
-                    .send({ id: rows.id, Authors: rows.Authors, Title: rows.Title, ISBN: rows.ISBN, Loanable: rows.Loanable, Quantity: rows.Quantity });
+                // check if a 'returned' value  is given
+                if (Returned == undefined) {
+                    db.all('SELECT BookID, StudentID, Due, Checkout, Returned from Loans WHERE BookID=?', [bookId.trim()], (err, rows) => {
+                        if (err) {
+                            console.error('Problem while querying database: ' + err);
+                            res.status(500) // internal server error ..
+                                .setHeader('content-type', 'application/json')
+                                .send({ err: "Problem while querying database" });
+                        }
+                        else
+                            rows.forEach(row =>
+                                loans.push({ BookID: row.BookID, StudentID: row.StudentID, Checkout: row.Checkout, Due: row.Due, Returned: row.Returned }));
+
+                        if (!rows) {
+                            res.status(404)
+                                .setHeader('content-type', 'application/json')
+                                .send({ err: `No matches found for parameters: 'BookId=${bookId}` });
+                        }
+                        else {
+                            res.status(200)
+                                .setHeader('content-type', 'application/json')
+                                .send(loans);
+                        }
+
+                    });
+
+                }
+                else {
+                    // Check returned format ..
+                    if (!Returned || _functions.isBlank(Returned)) {
+                        res.status(422)
+                            .setHeader('content-type', 'application/json')
+                            .send({ error: "Returned parameter is optional. Please remove '&' if you don't specify it!" });
+                    } else if (Returned.trim().toLowerCase() != "true" && Returned.trim().toLowerCase() != "false") {
+                        res.status(422)
+                            .setHeader('content-type', 'application/json')
+                            .send({ error: "Pending parameter must be either 'true' or 'false'!!" });
+                    } else {
+                        var returned = (Returned.trim() === 'true');
+                        db.all('SELECT BookID, StudentID, Due, Checkout, Returned from Loans WHERE BookID=? AND Returned=?', [bookId.trim(), returned], (err, rows) => {
+                            if (err) {
+                                console.error('Problem while querying database: ' + err);
+                                res.status(500) // internal server error ..
+                                    .setHeader('content-type', 'application/json')
+                                    .send({ error: "Problem while querying database" });
+                            }
+                            else
+                                rows.forEach(row =>
+                                    loans.push({ BookID: row.BookID, StudentID: row.StudentID, Checkout: row.Checkout, Due: row.Due, Returned: row.Returned }));
+
+                            if (loans.length == 0) {
+                                res.status(404)
+                                    .setHeader('content-type', 'application/json')
+                                    .send({ error: `No matches found for parameters: 'bookId = ${bookId}' and 'pending = ${Returned}'` });
+                            }
+                            else {
+                                res.status(200)
+                                    .setHeader('content-type', 'application/json')
+                                    .send(loans);
+                            }
+
+                        });
+                    }
+
+
+                }
+
+
             }
 
-    });
+        }));
+    }
+}
 
+// GET: {local} /library/loans/all?student&loanable (?)
+const GetLoansByStudentId = (req, res) => {
+    const studentId = req.query.studentId;
+    const Returned = req.query.pending;
+
+    var _studentsBooks = [];
+
+    // student id is of invalid format ..
+    if (!studentId || _functions.isBlank(studentId)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: "Student id can not be empty .." });
+    } else if (isNaN(studentId)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: "Student id should be an integer .." });
+    } else {
+
+        let id = parseInt(studentId);
+        // check if student id exist ..
+        db.get("SELECT ID, Name, YOB from Students WHERE ID = ? ", [id], (e, x => {
+            
+            // No such book exist ..
+            if (!x || id == 0) {
+                res.status(404)
+                    .setHeader('content-type', 'application/json')
+                    .send({ e: `Student with id ${studentId} does not exist ..` });
+            }
+            // student exist -> go find all books that are lent ..
+            else {
+                // check if a 'returned' value  is given
+                if (Returned == undefined) {
+                    db.all('SELECT BookID, StudentID, Due, Checkout, Returned from Loans WHERE StudentID=?', [studentId.trim()], (err, rows) => {
+                        if (err) {
+                            console.error('Problem while querying database: ' + err);
+                            res.status(500) // internal server error ..
+                                .setHeader('content-type', 'application/json')
+                                .send({ err: "Problem while querying database" });
+                        }
+                        else
+                            rows.forEach(row =>
+                                _studentsBooks.push({ BookID: row.BookID, StudentID: row.StudentID, Checkout: row.Checkout, Due: row.Due, Returned: row.Returned }));
+
+                        if (!rows) {
+                            res.status(404)
+                                .setHeader('content-type', 'application/json')
+                                .send({ err: `No matches found for parameters: 'studentId=${studentId}` });
+                        }
+                        else {
+                            res.status(200)
+                                .setHeader('content-type', 'application/json')
+                                .send(_studentsBooks);
+                        }
+
+                    });
+
+                }
+                else {
+                    // Check returned format ..
+                    if (!Returned || _functions.isBlank(Returned)) {
+                        res.status(422)
+                            .setHeader('content-type', 'application/json')
+                            .send({ error: "Returned parameter is optional. Please remove '&' if you don't specify it!" });
+                    } else if (Returned.trim().toLowerCase() != "true" && Returned.trim().toLowerCase() != "false") {
+                        res.status(422)
+                            .setHeader('content-type', 'application/json')
+                            .send({ error: "Pending parameter must be either 'true' or 'false'!!" });
+                    } else {
+                        var returned = (Returned.trim() === 'true');
+                        db.all('SELECT BookID, StudentID, Due, Checkout, Returned from Loans WHERE StudentID=? AND Returned=?', [studentId.trim(), returned], (err, rows) => {
+                            if (err) {
+                                console.error('Problem while querying database: ' + err);
+                                res.status(500) // internal server error ..
+                                    .setHeader('content-type', 'application/json')
+                                    .send({ error: "Problem while querying database" });
+                            }
+                            else
+                                rows.forEach(row =>
+                                    _studentsBooks.push({ BookID: row.BookID, StudentID: row.StudentID, Checkout: row.Checkout, Due: row.Due, Returned: row.Returned }));
+
+                            if (_studentsBooks.length == 0) {
+                                res.status(404)
+                                    .setHeader('content-type', 'application/json')
+                                    .send({ error: `No matches found for parameters: 'studentId = ${studentId}' and 'pending = ${Returned}'` });
+                            }
+                            else {
+                                res.status(200)
+                                    .setHeader('content-type', 'application/json')
+                                    .send(_studentsBooks);
+                            }
+
+                        });
+                    }
+
+
+                }
+
+
+            }
+
+        }));
+    }
 }
 
 
-module.exports = { AddNewLoan , GetLoans, GetLoansByBookId};
+
+module.exports = { AddNewLoan, GetLoans, GetLoansByBookId, GetLoansByStudentId };

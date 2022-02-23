@@ -36,6 +36,9 @@ router.put('/library/module/edit/:code', moduleController.EditModule);
 // (D) LOAN
 router.post('/library/loan/add', loanController.AddNewLoan );
 router.get('/library/loans', loanController.GetLoans );
+router.get('/library/loans/all', loanController.GetLoansByBookId );
+router.get('/library/loans/student/all', loanController.GetLoansByStudentId );
+
 
 // 4. 
 module.exports = router; // export to use in server.js

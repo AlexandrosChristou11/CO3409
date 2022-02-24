@@ -8,7 +8,7 @@ const router  = express.Router();
 const bookController = require("../Controllers/BookController");
 const studentController = require("../Controllers/StudentController");
 const moduleController = require("../Controllers/ModuleController");
-const loanController = require("../Controllers//LoanController");
+const loanController = require("../Controllers/LoanController");
 
 // 3.
 
@@ -36,8 +36,8 @@ router.put('/library/module/edit/:code', moduleController.EditModule);
 // (D) LOAN
 router.post('/library/loan/add', loanController.AddNewLoan );
 router.get('/library/loans', loanController.GetLoans );
-router.get('/library/loans/all', loanController.GetLoansByBookId );
-router.get('/library/loans/student/all', loanController.GetLoansByStudentId );
+router.get('/library/loans/book/:bookId', loanController.GetLoansByBookId );
+router.put('/library/loans/edit/:studentId/:bookId', loanController.EditLoan );
 
 
 // 4. 

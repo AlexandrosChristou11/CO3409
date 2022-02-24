@@ -195,9 +195,9 @@ const GetLoans = (req, res) => {
 
 // TODOO ... :
 // Also make a query on books table and check whether the book exists or not ..
-// GET: {local} /library/loans/all?bookId&loanable (?)
+// GET: {local} /library/loans/book/:bookId?pending=true
 const GetLoansByBookId = (req, res) => {
-    const bookId = req.query.bookId;
+    const { bookId } = req.params;
     const Returned = req.query.pending;
 
     var loans = [];
@@ -299,29 +299,30 @@ const GetLoansByBookId = (req, res) => {
     }
 }
 
-// GET: {local} /library/loans/all?student&loanable (?)
+// GET: {local} /library/loans/student/:id ? pending=true
 const GetLoansByStudentId = (req, res) => {
-    const studentId = req.query.studentId;
+    // const studentId = req.query.studentId;
+    const { studentId } = req.params;
     const Returned = req.query.pending;
 
     var _studentsBooks = [];
-
+    let id = parseInt(studentId);
     // student id is of invalid format ..
     if (!studentId || _functions.isBlank(studentId)) {
         res.status(422)
             .setHeader('content-type', 'application/json')
             .send({ error: "Student id can not be empty .." });
-    } else if (isNaN(studentId)) {
+    } else if (isNaN(id)) {
         res.status(422)
             .setHeader('content-type', 'application/json')
             .send({ error: "Student id should be an integer .." });
     } else {
 
-        let id = parseInt(studentId);
+
         // check if student id exist ..
-        db.get("SELECT ID, Name, YOB from Students WHERE ID = ? ", [id], (e, x => {
-            
-            // No such book exist ..
+        db.get("SELECT ID, Name, YOB from Students WHERE ID = ?", [studentId.trim()], (e, x) => {
+
+            // No such student exist ..
             if (!x || id == 0) {
                 res.status(404)
                     .setHeader('content-type', 'application/json')
@@ -399,10 +400,49 @@ const GetLoansByStudentId = (req, res) => {
 
             }
 
-        }));
+        });
     }
 }
 
 
+// PUT: {local}/library/loan/edit/{:studnetId} / :{bookId}
+const EditLoan = (req, res) => {
+    const { bookId } = req.params;      // get bookId from params
+    const { studentId } = req.params;      // get studentId from params
 
-module.exports = { AddNewLoan, GetLoans, GetLoansByBookId, GetLoansByStudentId };
+    const posted_loan = req.body;           // submitted book
+
+    if (!bookId || _functions.isBlank(code)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: `Book Id can not be empty` });
+    }
+    else if (isNaN(bookId)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: `Bood id should be an integer` }); // resource not found
+    }
+    else if (!studentId || _functions.isBlank(studentId)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: `Student Id can Snot be empty` });
+    }
+    else if (isNaN(studentId)) {
+        res.status(422)
+            .setHeader('content-type', 'application/json')
+            .send({ error: `Student id should be an integer` }); // resource not found
+    }
+
+    else {
+
+        tdb.beginTransaction(async function (err, transaction) { // BEGIN TRANSACTION
+            console.log(`validation was ok!`);
+
+        });
+
+    }
+};
+
+
+
+module.exports = { AddNewLoan, GetLoans, GetLoansByBookId, GetLoansByStudentId, EditLoan };

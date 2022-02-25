@@ -65,8 +65,8 @@ db.serialize(() => {
 db.serialize(() => {
     // create 'Loan' table if needed
     db.run(`CREATE TABLE IF NOT EXISTS Loans (
+        id INTEGER not null PRIMARY KEY AUTOINCREMENT ,
         BookID INTEGER  not null, StudentID INTEGER  not null, Checkout DATE , Due DATE, Returned BOOLEAN NOT NULL DEFAULT 0,
-        PRIMARY KEY(BookID, StudentID),
         FOREIGN KEY (BookID) 
          REFERENCES Book (id) 
           ON DELETE CASCADE 
@@ -113,7 +113,7 @@ db.serialize(() => {
 
 // db.serialize(() => {
 //     // create 'Loan' table if needed
-//     db.run(`DROP TABLE Loan` ,
+//     db.run(`DROP TABLE Loans` ,
     
 //     [], function (err) {
 //         if (err) console.log(`error while deleting table 'students': ${err}`)

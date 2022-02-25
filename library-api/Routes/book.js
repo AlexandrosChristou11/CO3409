@@ -37,7 +37,7 @@ router.put('/library/module/edit/:code', moduleController.EditModule);
 router.post('/library/loan/add', loanController.AddNewLoan );
 router.get('/library/loans', loanController.GetLoans );
 router.get('/library/loans/book/:bookId', loanController.GetLoansByBookId );
-router.put('/library/loans/edit/:studentId/:bookId', loanController.EditLoan );
+router.put('/library/loans/edit/:loanId', loanController.EditLoan );
 
 
 // 4. 

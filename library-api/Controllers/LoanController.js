@@ -10,6 +10,7 @@ let db = new sqlite3.Database('./db/library.db', sqlite3.OPEN_READWRITE | sqlite
 
 const e = require('express');
 const _functions = require('../Generic Methods/GlobalFunctions'); // import the routes
+const { post } = require('../Routes/book');
 
 
 var tdb = new TransactionDatabase(db); // wrap database into a transaction object ..
@@ -171,7 +172,7 @@ const AddNewLoan = (req, res) => {
 // GET: {local}/library/loans
 const GetLoans = (req, res) => {
     var _loans = [];
-    db.all('SELECT BookID, StudentID, Due, Checkout, Returned from Loans', (err, rows) => {
+    db.all('SELECT id, BookID, StudentID, Due, Checkout, Returned from Loans', (err, rows) => {
         if (err) {
             console.error('Problem while querying database: ' + err);
             res.status(500) // internal server error ..
@@ -181,7 +182,7 @@ const GetLoans = (req, res) => {
         }
 
         rows.forEach(row =>
-            _loans.push({ BookID: row.BookID, StudentID: row.StudentID, Checkout: row.Checkout, Due: row.Due, Returned: row.Returned }));
+            _loans.push({ id: row.id, BookID: row.BookID, StudentID: row.StudentID, Checkout: row.Checkout, Due: row.Due, Returned: row.Returned }));
         res.status(200)
             .setHeader('content-type', 'application/json')
             .send(_loans);
@@ -404,177 +405,1110 @@ const GetLoansByStudentId = (req, res) => {
     }
 }
 
+async function ContinueWithNextValidations(posted_loan, transaction, due, checkout, returned, res) {
+
+    // returned field validatoin ..
+    if (posted_loan.returned != undefined) {
+
+        // check if its not empty strings ..
+        if (_functions.isBlank(returned)) {
+
+            transaction.rollback((err) => { // ROLLBACK
+                if (err) console.log(`error: ${err}`)
+            });
+            res.status(422)
+                .setHeader('content-type', 'application/json')
+                .send({ error: "Returned parameter can not be empty!" });
+        }
+        // check if values an not in 'true' or 'false'
+        else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
+
+
+            res.status(422)
+                .setHeader('content-type', 'application/json')
+                .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
+            transaction.rollback((err) => { // ROLLBACK
+                if (err) console.log(`error: ${err}`)
+            });
+        } else {
+
+            const parameters = [
+                posted_loan.checkout ?? x.Checkout,
+                posted_loan.due ?? x.Due,
+                _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.returned,
+                loanId
+            ];
+
+            transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+                if (errorTransaction) {
+                    if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+                        transaction.rollback((err) => { // ROLLBACK
+                            if (err) console.log(`error: ${err}`);
+                        });
+                        transaction.rollback((err) => { // ROLLBACK
+                            if (err) console.log(`error: ${err}`);
+                        });
+                        res.status(409)
+                            .setHeader('content-type', 'application/json')
+                            .send({ error: `Contraint Error | ${errorTransaction.message}` })
+                    }
+                    else {
+                        transaction.rollback((err) => { // ROLLBACK
+                            if (err) console.log(`error: ${err}`);
+                        });
+                        res.status(500)
+                            .setHeader('content-type', 'application/json')
+                            .send({ errorTransaction })
+                    }
+                }
+                else {
+                    transaction.commit((errorCommit) => { // COMMIT
+                        if (err) console.log(`error: ${errorCommit}`);
+                    });
+
+                    res.status(200)
+                        .setHeader('content-type', 'application/json')
+                        .send({ message: "Loan updated", id: this.lastID });
+                }
+
+            });
+            transaction.commit((errorCommit) => { // COMMIT
+                if (err) console.log(`error: ${errorCommit}`);
+            });
+
+        }
+
+    } else {
+
+        const parameters = [
+            posted_loan.checkout ?? x.Checkout,
+            posted_loan.due ?? x.Due,
+            _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.returned,
+            loanId
+        ];
+
+        transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+            if (errorTransaction) {
+                if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+                    transaction.rollback((err) => { // ROLLBACK
+                        if (err) console.log(`error: ${err}`);
+                    });
+                    transaction.rollback((err) => { // ROLLBACK
+                        if (err) console.log(`error: ${err}`);
+                    });
+                    res.status(409)
+                        .setHeader('content-type', 'application/json')
+                        .send({ error: `Contraint Error | ${errorTransaction.message}` })
+                }
+                else {
+                    transaction.rollback((err) => { // ROLLBACK
+                        if (err) console.log(`error: ${err}`);
+                    });
+                    res.status(500)
+                        .setHeader('content-type', 'application/json')
+                        .send({ errorTransaction })
+                }
+            }
+            else {
+                transaction.commit((errorCommit) => { // COMMIT
+                    if (err) console.log(`error: ${errorCommit}`);
+                });
+
+                res.status(200)
+                    .setHeader('content-type', 'application/json')
+                    .send({ message: "Loan updated", id: this.lastID });
+            }
+
+        });
+        transaction.commit((errorCommit) => { // COMMIT
+            if (err) console.log(`error: ${errorCommit}`);
+        });
+
+    }
+
+
+}
+
+
+
+
+
+
+// // PUT: {local}/library/loans/edit/{:loanId}
+// const EditLoan = (req, res) => {
+//     const { loanId } = req.params;            // get loanId from params
+
+//     const posted_loan = req.body;           // submitted loan
+
+//     if (!loanId || _functions.isBlank(loanId)) {
+//         res.status(422)
+//             .setHeader('content-type', 'application/json')
+//             .send({ error: `Loan Id can not be empty` });
+//     }
+//     else if (isNaN(loanId)) {
+//         res.status(422)
+//             .setHeader('content-type', 'application/json')
+//             .send({ error: `Loan id should be an integer` }); // resource not found
+//     }
+
+//     else {
+
+//         tdb.beginTransaction(async function (err, transaction) { // BEGIN TRANSACTION
+
+//             // Check whether LoanId exists in the dataset ..
+//             transaction.get('SELECT id, BookId, StudentId, Checkout, Due, Returned FROM Loans WHERE id = ? ', [loanId], (e, x) => {
+
+
+//                 // loan id does not exist ..
+//                 if (!x || loanId == 0) {
+
+//                     transaction.rollback((err) => { // ROLLBACK
+//                         if (err) console.log(`error: ${err}`)
+//                     });
+//                     res.status(422)
+//                         .setHeader('content-type', 'application/json')
+//                         .send({ error: `Loan id does not exist ..` }); // resource not found
+
+//                 }
+//                 // Loan id exist .. move to next conditions ..
+//                 else {
+//                     var due = new Date(posted_loan.due);
+//                     var checkout = new Date(posted_loan.checkout);
+//                     var returned = posted_loan.returned;
+
+//                     var now = new Date();
+
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+//                     //                              CHECKOUT VALIDATION 
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+//                     if (posted_loan.checkout != undefined) {
+
+//                         // check if checkout is not empty string ..
+//                         if (isNaN(checkout) || checkout.toString().trim() == '') {
+//                             transaction.rollback((err) => { // ROLLBACK
+//                                 if (err) console.log(`error: ${err}`)
+//                             });
+//                             res.status(422)
+//                                 .setHeader('content-type', 'application/json')
+//                                 .send({ error: `Checkout field can not be empty!` }); // resource not found
+//                         }
+//                         else if (!isValidDate(checkout)) {
+//                             transaction.rollback((err) => { // ROLLBACK
+//                                 if (err) console.log(`error: ${err}`)
+//                             });
+//                             res.status(422)
+//                                 .setHeader('content-type', 'application/json')
+//                                 .send({ error: `Checkout field has invalid format. Please use the format of: yyyy-mm-dd` }); // resource not found
+
+
+//                         }
+//                         else {
+
+//                             if (posted_loan.due != undefined) {
+
+//                                 // check if its empty ..
+//                                 if ((isNaN(due) || posted_loan.due.toString().trim() == '')) {
+//                                     transaction.rollback((err) => { // ROLLBACK
+//                                         if (err) console.log(`error: ${err}`)
+//                                     });
+//                                     res.status(422)
+//                                         .setHeader('content-type', 'application/json')
+//                                         .send({ error: `Due field can not be empty` }); // resource not found
+
+//                                 }
+//                                 // check if due is not date format
+//                                 else if (!isValidDate(due)) {
+//                                     transaction.rollback((err) => { // ROLLBACK
+//                                         if (err) console.log(`error: ${err}`)
+//                                     });
+//                                     res.status(422)
+//                                         .setHeader('content-type', 'application/json')
+//                                         .send({ error: `Due field has invalid format. Please use the format of: yyyy-mm-dd/` }); // resource not found
+
+
+//                                 }
+//                                 // check if due is not 90days more than the checkout
+//                                 else if ((due > checkout && checkout != undefined) || (due > x.Checkout)) {
+
+//                                     const diffTime = Math.abs(due) - checkout ?? x.Checkout;
+//                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+//                                     if (diffDays > 90) {
+
+//                                         transaction.rollback((err) => { // ROLLBACK
+//                                             if (err) console.log(`error: ${err}`)
+//                                         });
+//                                         res.status(422) // bad request
+//                                             .setHeader('content-type', 'application/json')
+//                                             .send({ error: `Due date must be less than 90 days from Checkout` });
+
+//                                     }
+//                                     else if (due < now) {
+//                                         transaction.rollback((err) => { // ROLLBACK
+//                                             if (err) console.log(`error: ${err}`)
+//                                         });
+
+//                                         res.status(422) // bad request
+//                                             .setHeader('content-type', 'application/json')
+//                                             .send({ error: `Due date can not be in the past.` })
+
+//                                     }
+//                                     // check if due is not lower than checkout
+//                                     else if (due < checkout || due < x.checkout) {
+//                                         transaction.rollback((err) => { // ROLLBACK
+//                                             if (err) console.log(`error: ${err}`)
+//                                         });
+
+//                                         res.status(422) // bad request
+//                                             .setHeader('content-type', 'application/json')
+//                                             .send({ error: `Due date can not be before checkout date` })
+//                                     } else {
+//                                         // returned field validatoin ..
+//                                         if (posted_loan.returned != undefined) {
+
+//                                             // check if its not empty strings ..
+//                                             if (_functions.isBlank(returned)) {
+
+//                                                 transaction.rollback((err) => { // ROLLBACK
+//                                                     if (err) console.log(`error: ${err}`)
+//                                                 });
+//                                                 res.status(422)
+//                                                     .setHeader('content-type', 'application/json')
+//                                                     .send({ error: "Returned parameter can not be empty!" });
+//                                             }
+//                                             // check if values an not in 'true' or 'false'
+//                                             else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
+
+
+//                                                 res.status(422)
+//                                                     .setHeader('content-type', 'application/json')
+//                                                     .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
+//                                                 transaction.rollback((err) => { // ROLLBACK
+//                                                     if (err) console.log(`error: ${err}`)
+//                                                 });
+//                                             } else {
+
+//                                                 const parameters = [
+//                                                     posted_loan.checkout ?? x.Checkout,
+//                                                     posted_loan.due ?? x.Due,
+//                                                     posted_loan.returned ?? x.returned,
+//                                                     loanId
+//                                                 ];
+
+//                                                 transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+//                                                     if (errorTransaction) {
+//                                                         if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+//                                                             transaction.rollback((err) => { // ROLLBACK
+//                                                                 if (err) console.log(`error: ${err}`);
+//                                                             });
+//                                                             transaction.rollback((err) => { // ROLLBACK
+//                                                                 if (err) console.log(`error: ${err}`);
+//                                                             });
+//                                                             res.status(409)
+//                                                                 .setHeader('content-type', 'application/json')
+//                                                                 .send({ error: `Contraint Error | ${errorTransaction.message}` })
+//                                                         }
+//                                                         else {
+//                                                             transaction.rollback((err) => { // ROLLBACK
+//                                                                 if (err) console.log(`error: ${err}`);
+//                                                             });
+//                                                             res.status(500)
+//                                                                 .setHeader('content-type', 'application/json')
+//                                                                 .send({ errorTransaction })
+//                                                         }
+//                                                     }
+//                                                     else {
+//                                                         transaction.commit((errorCommit) => { // COMMIT
+//                                                             if (err) console.log(`error: ${errorCommit}`);
+//                                                         });
+
+//                                                         res.status(200)
+//                                                             .setHeader('content-type', 'application/json')
+//                                                             .send({ message: "Loan updated", id: this.lastID });
+//                                                     }
+
+//                                                 });
+//                                                 transaction.commit((errorCommit) => { // COMMIT
+//                                                     if (err) console.log(`error: ${errorCommit}`);
+//                                                 });
+
+//                                             }
+
+//                                         }else{
+//                                             ContinueWithNextValidations(posted_loan, transaction, due, checkout, returned, res);
+//                                         }
+
+//                                     }
+
+//                                 }
+//                                 // check if due is not in the past ..
+//                                 else {
+//                                     ContinueWithNextValidations(posted_loan, transaction, due, checkout, returned, res);
+
+//                                 }
+//                             }
+
+//                             // returned field validatoin ..
+//                             else if (posted_loan.returned != undefined) {
+
+//                                 // check if its not empty strings ..
+//                                 if (_functions.isBlank(returned)) {
+
+//                                     transaction.rollback((err) => { // ROLLBACK
+//                                         if (err) console.log(`error: ${err}`)
+//                                     });
+//                                     res.status(422)
+//                                         .setHeader('content-type', 'application/json')
+//                                         .send({ error: "Returned parameter can not be empty!" });
+//                                 }
+//                                 // check if values an not in 'true' or 'false'
+//                                 else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
+
+
+//                                     res.status(422)
+//                                         .setHeader('content-type', 'application/json')
+//                                         .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
+//                                     transaction.rollback((err) => { // ROLLBACK
+//                                         if (err) console.log(`error: ${err}`)
+//                                     });
+//                                 } else {
+
+//                                     const parameters = [
+//                                         posted_loan.checkout ?? x.Checkout,
+//                                         posted_loan.due ?? x.Due,
+//                                         posted_loan.returned ?? x.returned,
+//                                         loanId
+//                                     ];
+
+//                                     transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+//                                         if (errorTransaction) {
+//                                             if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+//                                                 transaction.rollback((err) => { // ROLLBACK
+//                                                     if (err) console.log(`error: ${err}`);
+//                                                 });
+//                                                 transaction.rollback((err) => { // ROLLBACK
+//                                                     if (err) console.log(`error: ${err}`);
+//                                                 });
+//                                                 res.status(409)
+//                                                     .setHeader('content-type', 'application/json')
+//                                                     .send({ error: `Contraint Error | ${errorTransaction.message}` })
+//                                             }
+//                                             else {
+//                                                 transaction.rollback((err) => { // ROLLBACK
+//                                                     if (err) console.log(`error: ${err}`);
+//                                                 });
+//                                                 res.status(500)
+//                                                     .setHeader('content-type', 'application/json')
+//                                                     .send({ errorTransaction })
+//                                             }
+//                                         }
+//                                         else {
+//                                             transaction.commit((errorCommit) => { // COMMIT
+//                                                 if (err) console.log(`error: ${errorCommit}`);
+//                                             });
+
+//                                             res.status(200)
+//                                                 .setHeader('content-type', 'application/json')
+//                                                 .send({ message: "Loan updated", id: this.lastID });
+//                                         }
+
+//                                     });
+//                                     transaction.commit((errorCommit) => { // COMMIT
+//                                         if (err) console.log(`error: ${errorCommit}`);
+//                                     });
+
+//                                 }
+
+//                             }
+
+
+//                             else {
+
+//                                 const parameters = [
+//                                     posted_loan.checkout ?? x.Checkout,
+//                                     posted_loan.due ?? x.Due,
+//                                     posted_loan.returned ?? x.returned,
+//                                     loanId
+//                                 ];
+
+//                                 transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+//                                     if (errorTransaction) {
+//                                         if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+//                                             transaction.rollback((err) => { // ROLLBACK
+//                                                 if (err) console.log(`error: ${err}`);
+//                                             });
+//                                             transaction.rollback((err) => { // ROLLBACK
+//                                                 if (err) console.log(`error: ${err}`);
+//                                             });
+//                                             res.status(409)
+//                                                 .setHeader('content-type', 'application/json')
+//                                                 .send({ error: `Contraint Error | ${errorTransaction.message}` })
+//                                         }
+//                                         else {
+//                                             transaction.rollback((err) => { // ROLLBACK
+//                                                 if (err) console.log(`error: ${err}`);
+//                                             });
+//                                             res.status(500)
+//                                                 .setHeader('content-type', 'application/json')
+//                                                 .send({ errorTransaction })
+//                                         }
+//                                     }
+//                                     else {
+//                                         transaction.commit((errorCommit) => { // COMMIT
+//                                             if (err) console.log(`error: ${errorCommit}`);
+//                                         });
+
+//                                         res.status(200)
+//                                             .setHeader('content-type', 'application/json')
+//                                             .send({ message: "Loan updated", id: this.lastID });
+//                                     }
+
+//                                 });
+//                                 transaction.commit((errorCommit) => { // COMMIT
+//                                     if (err) console.log(`error: ${errorCommit}`);
+//                                 });
+//                             }
+
+//                         }
+
+
+//                     }
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+//                     //                             END OF  CHECKOUT VALIDATION 
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+//                     //                           DUE VALIDATION 
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+
+//                     // due field validation 
+//                     else if (posted_loan.due != undefined) {
+
+//                         // check if its empty ..
+//                         if (!(isNaN(due) || due.toString().trim() == '')) {
+//                             transaction.rollback((err) => { // ROLLBACK
+//                                 if (err) console.log(`error: ${err}`)
+//                             });
+//                             res.status(422)
+//                                 .setHeader('content-type', 'application/json')
+//                                 .send({ error: `Due field can not be empty` }); // resource not found
+
+//                         }
+//                         // check if due is not date format
+//                         else if (!isValidDate(posted_loan.due.toISOString().slice(0, 10))) {
+//                             transaction.rollback((err) => { // ROLLBACK
+//                                 if (err) console.log(`error: ${err}`)
+//                             });
+//                             res.status(422)
+//                                 .setHeader('content-type', 'application/json')
+//                                 .send({ error: `Due field has invalid format. Please use the format of: yyyy-mm-dd/` }); // resource not found
+
+
+//                         }
+//                         // check if due is not 90days more than the checkout
+//                         else if ((due > checkout && checkout != undefined) || (due > x.Checkout)) {
+
+//                             const diffTime = Math.abs(due) - checkout ?? x.Checkout;
+//                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+//                             if (diffDays > 90) {
+
+//                                 transaction.rollback((err) => { // ROLLBACK
+//                                     if (err) console.log(`error: ${err}`)
+//                                 });
+//                                 res.status(422) // bad request
+//                                     .setHeader('content-type', 'application/json')
+//                                     .send({ error: `Due date must be less than 90 days from Checkout` });
+
+//                             }  // check if due is not in the past ..
+//                             else if (due < now) {
+//                                 transaction.rollback((err) => { // ROLLBACK
+//                                     if (err) console.log(`error: ${err}`)
+//                                 });
+
+//                                 res.status(422) // bad request
+//                                     .setHeader('content-type', 'application/json')
+//                                     .send({ error: `Due date can not be in the past.` })
+
+//                             }
+//                             // check if due is not lower than checkout
+//                             else if (due < checkout || due < x.checkout) {
+//                                 transaction.rollback((err) => { // ROLLBACK
+//                                     if (err) console.log(`error: ${err}`)
+//                                 });
+
+//                                 res.status(422) // bad request
+//                                     .setHeader('content-type', 'application/json')
+//                                     .send({ error: `Due date can not be before checkout date` })
+//                             }
+
+
+//                         }
+
+
+//                     }
+
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+//                     //                                  END OF  DUE VALIDATION 
+//                     //---------------------------------------------------------------------------------------------------------------------------------------------
+
+//                     // returned field validatoin ..
+//                     else if (posted_loan.returned != undefined) {
+
+//                         // check if its not empty strings ..
+//                         if (_functions.isBlank(returned)) {
+
+//                             transaction.rollback((err) => { // ROLLBACK
+//                                 if (err) console.log(`error: ${err}`)
+//                             });
+//                             res.status(422)
+//                                 .setHeader('content-type', 'application/json')
+//                                 .send({ error: "Returned parameter can not be empty!" });
+//                         }
+//                         // check if values an not in 'true' or 'false'
+//                         else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
+
+
+//                             res.status(422)
+//                                 .setHeader('content-type', 'application/json')
+//                                 .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
+//                             transaction.rollback((err) => { // ROLLBACK
+//                                 if (err) console.log(`error: ${err}`)
+//                             });
+//                         } else {
+
+//                             const parameters = [
+//                                 posted_loan.checkout ?? x.Checkout,
+//                                 posted_loan.due ?? x.Due,
+//                                 posted_loan.returned ?? x.returned,
+//                                 loanId
+//                             ];
+
+//                             transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+//                                 if (errorTransaction) {
+//                                     if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+//                                         transaction.rollback((err) => { // ROLLBACK
+//                                             if (err) console.log(`error: ${err}`);
+//                                         });
+//                                         transaction.rollback((err) => { // ROLLBACK
+//                                             if (err) console.log(`error: ${err}`);
+//                                         });
+//                                         res.status(409)
+//                                             .setHeader('content-type', 'application/json')
+//                                             .send({ error: `Contraint Error | ${errorTransaction.message}` })
+//                                     }
+//                                     else {
+//                                         transaction.rollback((err) => { // ROLLBACK
+//                                             if (err) console.log(`error: ${err}`);
+//                                         });
+//                                         res.status(500)
+//                                             .setHeader('content-type', 'application/json')
+//                                             .send({ errorTransaction })
+//                                     }
+//                                 }
+//                                 else {
+//                                     transaction.commit((errorCommit) => { // COMMIT
+//                                         if (err) console.log(`error: ${errorCommit}`);
+//                                     });
+
+//                                     res.status(200)
+//                                         .setHeader('content-type', 'application/json')
+//                                         .send({ message: "Loan updated", id: this.lastID });
+//                                 }
+
+//                             });
+//                             transaction.commit((errorCommit) => { // COMMIT
+//                                 if (err) console.log(`error: ${errorCommit}`);
+//                             });
+
+//                         }
+
+//                     }
+
+
+//                     else {
+
+//                         const parameters = [
+//                             posted_loan.checkout ?? x.Checkout,
+//                             posted_loan.due ?? x.Due,
+//                             _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.returned,
+//                             loanId
+//                         ];
+
+//                         transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+//                             if (errorTransaction) {
+//                                 if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+//                                     transaction.rollback((err) => { // ROLLBACK
+//                                         if (err) console.log(`error: ${err}`);
+//                                     });
+//                                     transaction.rollback((err) => { // ROLLBACK
+//                                         if (err) console.log(`error: ${err}`);
+//                                     });
+//                                     res.status(409)
+//                                         .setHeader('content-type', 'application/json')
+//                                         .send({ error: `Contraint Error | ${errorTransaction.message}` })
+//                                 }
+//                                 else {
+//                                     transaction.rollback((err) => { // ROLLBACK
+//                                         if (err) console.log(`error: ${err}`);
+//                                     });
+//                                     res.status(500)
+//                                         .setHeader('content-type', 'application/json')
+//                                         .send({ errorTransaction })
+//                                 }
+//                             }
+//                             else {
+//                                 transaction.commit((errorCommit) => { // COMMIT
+//                                     if (err) console.log(`error: ${errorCommit}`);
+//                                 });
+
+//                                 res.status(200)
+//                                     .setHeader('content-type', 'application/json')
+//                                     .send({ message: "Loan updated", id: this.lastID });
+//                             }
+
+//                         });
+//                         transaction.commit((errorCommit) => { // COMMIT
+//                             if (err) console.log(`error: ${errorCommit}`);
+//                         });
+//                     }
+
+//                 }
+
+//             });
+
+//         });
+
+//     }
+// };
+
+function UpdateLoanValues(res, transaction, parameters, err) {
+
+    transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
+
+        if (errorTransaction) {
+            if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+                transaction.rollback((err) => { // ROLLBACK
+                    if (err) console.log(`error: ${err}`);
+                });
+                transaction.rollback((err) => { // ROLLBACK
+                    if (err) console.log(`error: ${err}`);
+                });
+                res.status(409)
+                    .setHeader('content-type', 'application/json')
+                    .send({ error: `Contraint Error | ${errorTransaction.message}` })
+            }
+            else {
+                transaction.rollback((err) => { // ROLLBACK
+                    if (err) console.log(`error: ${err}`);
+                });
+                res.status(500)
+                    .setHeader('content-type', 'application/json')
+                    .send({ errorTransaction })
+            }
+        }
+        else {
+            transaction.commit((errorCommit) => { // COMMIT
+                if (err) console.log(`error: ${errorCommit}`);
+            });
+
+            _functions.sendResponse(200, res, `Loan was updated.`);
+        }
+
+    });
+
+}
+
 
 // PUT: {local}/library/loans/edit/{:loanId}
 const EditLoan = (req, res) => {
+
     const { loanId } = req.params;            // get loanId from params
 
     const posted_loan = req.body;           // submitted loan
 
     if (!loanId || _functions.isBlank(loanId)) {
-        res.status(422)
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Loan Id can not be empty` });
+        _functions.sendResponse(422, res, "Loan Id can not be empty ..")
     }
     else if (isNaN(loanId)) {
-        res.status(422)
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Loan id should be an integer` }); // resource not found
+        _functions.sendResponse(422, res, "Loan Id should be an integer ..")
     }
-
     else {
-
         tdb.beginTransaction(async function (err, transaction) { // BEGIN TRANSACTION
 
-            // Check whether LoanId exists in the dataset ..
             transaction.get('SELECT id, BookId, StudentId, Checkout, Due, Returned FROM Loans WHERE id = ? ', [loanId], (e, x) => {
-
-
-                // loan id does not exist ..
+                var isCheckoutValid = _functions.isValidDate(posted_loan.checkout)
+                // Loan id does not exist in the dataset ..
                 if (!x || loanId == 0) {
-
+                    _functions.sendResponse(422, res, "Loan Id does not exist ..")
                     transaction.rollback((err) => { // ROLLBACK
-                        if (err) console.log(`error: ${err}`)
+                        if (err) console.log(`error: ${err}`);
                     });
-                    res.status(422)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: `Loan id does not exist ..` }); // resource not found
-
                 }
-                // Loan id exist .. move to next conditions ..
+
+                // loan id is valid and exist .. move to next steps ..
                 else {
-                    var due = Date.parse(posted_loan.due);
-                    var checkout = Date.parse(posted_loan.checkout);
+                    var checkout = posted_loan.checkout;
+                    var due = posted_loan.due;
                     var returned = posted_loan.returned;
                     var now = new Date();
+                    var _dueDate = new Date(posted_loan.due);
 
-                    if (due != undefined && (isNaN(due) || due.toString().trim() == '')) {
+                    // posted loan exist check its format and move to next steps ..
+                    if (posted_loan.checkout != undefined) {
 
-                        transaction.rollback((err) => { // ROLLBACK
-                            if (err) console.log(`error: ${err}`)
-                        });
-                        res.status(422)
-                            .setHeader('content-type', 'application/json')
-                            .send({ error: `Due field has an invalid format. Format should be 'yyyy-mm-dd'` }); // resource not found
-
-                    }
-                    else if (checkout != undefined && (isNaN(checkout) || checkout.toString().trim() == '')) {
-
-                        transaction.rollback((err) => { // ROLLBACK
-                            if (err) console.log(`error: ${err}`)
-                        });
-                        res.status(422)
-                            .setHeader('content-type', 'application/json')
-                            .send({ error: `Checkout field has an invalid format. Format should be 'yyyy-mm-dd'` }); // resource not found
-                    }
-
-                    else if (!returned != undefined && _functions.isBlank(returned)) {
-
-                        transaction.rollback((err) => { // ROLLBACK
-                            if (err) console.log(`error: ${err}`)
-                        });
-                        res.status(422)
-                            .setHeader('content-type', 'application/json')
-                            .send({ error: "Returned parameter can not be empty!" });
-                    }
-                    else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
-
-                        transaction.rollback((err) => { // ROLLBACK
-                            if (err) console.log(`error: ${err}`)
-                        });
-                        res.status(422)
-                            .setHeader('content-type', 'application/json')
-                            .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
-                    }
-                    else if ((due > checkout && checkout != undefined) || (due > x.Checkout)) {
-
-                        const diffTime = Math.abs(due) - checkout ?? x.Checkout;
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        if (diffDays > 90) {
+                        // Check if empty..
+                        if (!_functions.isDateEmpty(posted_loan.checkout)) {
+                            _functions.sendResponse(422, res, 'Checkout field can not be empty.');
                             transaction.rollback((err) => { // ROLLBACK
-                                if (err) console.log(`error: ${err}`)
+                                if (err) console.log(`error: ${err}`);
                             });
-
-                            res.status(422) // bad request
-                                .setHeader('content-type', 'application/json')
-                                .send({ error: `Due date must be less than 90 days from Checkout` })
                         }
-                    
-                    } 
-                    else if (due < checkout || due < x.checkout) {
-                        transaction.rollback((err) => { // ROLLBACK
-                            if (err) console.log(`error: ${err}`)
-                        });
+                        // check if it is of valid format ..
+                        else if (isCheckoutValid === true) {
+                            _functions.sendResponse(422, res, 'Checkout field should be of format yyyy-mm-dd');
+                            transaction.rollback((err0) => { // ROLLBACK
+                                if (err) console.log(`error: ${err}`);
+                            });
+                        }
 
-                        res.status(422) // bad request
-                            .setHeader('content-type', 'application/json')
-                            .send({ error: `Due date can not be before checkout date` })
-                    }
-                    else if (due < now) {
-                        transaction.rollback((err) => { // ROLLBACK
-                            if (err) console.log(`error: ${err}`)
-                        });
+                        /*
+                        Scenario 1: 
+                        Checkout: OK,
+                        Due: undefined,
+                        Returnd: undefined
+                        */
+                        else if (posted_loan.due == undefined) {
 
-                        res.status(422) // bad request
-                            .setHeader('content-type', 'application/json')
-                            .send({ error: `Due date can not be in the past.` })
+                            // check if returned is also undefined ..
+                            if (posted_loan.returned == undefined) {
+                                const parameters = [
+                                    posted_loan.checkout ?? x.Checkout,
+                                    posted_loan.due ?? x.Due,
+                                    x.Returned,
+                                    loanId
+                                ];
 
-                    }else {
-
-                        const parameters = [
-                            posted_loan.checkout ?? x.Checkout,
-                            posted_loan.due ?? x.Due,
-                            posted_loan.returned ?? x.returned,
-                            loanId
-                        ];
-    
-                        transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
-                          
-                            if (errorTransaction) {
-                                if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
-                                    transaction.rollback((err) => { // ROLLBACK
-                                        if (err) console.log(`error: ${err}`);
-                                    });
-                                    transaction.rollback((err) => { // ROLLBACK
-                                        if (err) console.log(`error: ${err}`);
-                                    });
-                                    res.status(409)
-                                        .setHeader('content-type', 'application/json')
-                                        .send({ error: `Contraint Error | ${errorTransaction.message}` })
-                                }
-                                else {
-                                    transaction.rollback((err) => { // ROLLBACK
-                                        if (err) console.log(`error: ${err}`);
-                                    });
-                                    res.status(500)
-                                        .setHeader('content-type', 'application/json')
-                                        .send({ errorTransaction })
-                                }
-                            }
-                            else {
+                                UpdateLoanValues(res, transaction, parameters, err);
                                 transaction.commit((errorCommit) => { // COMMIT
                                     if (err) console.log(`error: ${errorCommit}`);
                                 });
+                            }
+                            else if (posted_loan.returned != undefined) {
 
-                                res.status(200)
-                                    .setHeader('content-type', 'application/json')
-                                    .send({ message: "Loan updated", id: this.lastID });
+                                // check if its empty strings
+                                if (_functions.isBlank(posted_loan.returned)) {
+                                    _functions.sendResponse(422, res, 'returned field can not be empty strings.');
+                                    transaction.rollback((err0) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                                }
+                                // check format
+                                else if (posted_loan.returned.trim().toLowerCase() != "true" && posted_loan.returned.trim().toLowerCase() != "false") {
+                                    _functions.sendResponse(422, res, 'returned values can be only true or false');
+                                    transaction.rollback((err0) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                                }
+                                // all ok send response!
+                                else {
+                                    const parameters = [
+                                        posted_loan.checkout ?? x.Checkout,
+                                        posted_loan.due ?? x.Due,
+                                        _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.Returned,
+                                        loanId
+                                    ];
+                                    UpdateLoanValues(res, transaction, parameters, err);
+                                    transaction.commit((errorCommit) => { // COMMIT
+                                        if (err) console.log(`error: ${errorCommit}`);
+                                    });
+                                }
+
+
+
+                            }
+                        }
+                        else if (posted_loan.due != undefined) {
+
+
+                            // Check if empty..
+                            if (!_functions.isDateEmpty(posted_loan.due)) {
+                                _functions.sendResponse(422, res, 'Due field can not be empty.');
+                                transaction.rollback((err) => { // ROLLBACK
+                                    if (err) console.log(`error: ${err}`);
+                                });
+                            }
+                            // check if it is of valid format ..
+                            else if (_functions.isValidDate(posted_loan.due) === true) {
+                                _functions.sendResponse(422, res, 'Due field should be of format yyyy-mm-dd');
+                                transaction.rollback((err0) => { // ROLLBACK
+                                    if (err) console.log(`error: ${err}`);
+                                });
+                            }
+                            // check that it is not int the past
+                            else if (_dueDate < now) {
+                                _functions.sendResponse(422, res, 'Due date can not be in the past');
+                                transaction.rollback((err0) => { // ROLLBACK
+                                    if (err) console.log(`error: ${err}`);
+                                });
+                            }
+                            else if (Date.parse(posted_loan.due) > Date.parse(posted_loan.checkout)) {
+                                var dueDate = new Date(posted_loan.due);
+                                var checkoutDate = new Date(posted_loan.checkout);
+                                const diffTime = Math.abs(dueDate - checkoutDate);
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                                if (diffDays > 90) {
+                                    _functions.sendResponse(422, res, 'Due date can not be more than 90 from checkout date');
+                                    transaction.rollback((err) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`)
+                                    });
+
+                                } else if (posted_loan.returned == undefined) {
+                                    const parameters = [
+                                        posted_loan.checkout ?? x.Checkout,
+                                        posted_loan.due ?? x.Due,
+                                        x.Returned,
+                                        loanId
+                                    ];
+                                    UpdateLoanValues(res, transaction, parameters, err);
+                                    transaction.commit((errorCommit) => { // COMMIT
+                                        if (err) console.log(`error: ${errorCommit}`);
+                                    });
+                                } else if (posted_loan.returned != undefined) {
+
+                                    // check if its empty strings
+                                    if (_functions.isBlank(posted_loan.returned)) {
+                                        _functions.sendResponse(422, res, 'returned field can not be empty strings.');
+                                        transaction.rollback((err0) => { // ROLLBACK
+                                            if (err) console.log(`error: ${err}`);
+                                        });
+                                    }
+                                    // check format
+                                    else if (posted_loan.returned.trim().toLowerCase() != "true" && posted_loan.returned.trim().toLowerCase() != "false") {
+                                        _functions.sendResponse(422, res, 'returned values can be only true or false');
+                                        transaction.rollback((err0) => { // ROLLBACK
+                                            if (err) console.log(`error: ${err}`);
+                                        });
+                                    }
+                                    // all ok send response!
+                                    else {
+                                        const parameters = [
+                                            posted_loan.checkout ?? x.Checkout,
+                                            posted_loan.due ?? x.Due,
+                                            _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.Returned,
+                                            loanId
+                                        ];
+                                        UpdateLoanValues(res, transaction, parameters, err);
+                                        transaction.commit((errorCommit) => { // COMMIT
+                                            if (err) console.log(`error: ${errorCommit}`);
+                                        });
+                                    }
+
+
+
+                                }
                             }
 
-                        });
-                        transaction.commit((errorCommit) => { // COMMIT
-                            if (err) console.log(`error: ${errorCommit}`);
-                        });
+
+                        }
+
+
                     }
+
+                    else if (posted_loan.checkout == undefined) {
+
+                        if (posted_loan.due != undefined) {
+
+
+                            // Check if empty..
+                            if (!_functions.isDateEmpty(posted_loan.due)) {
+                                _functions.sendResponse(422, res, 'Due field can not be empty.');
+                                transaction.rollback((err) => { // ROLLBACK
+                                    if (err) console.log(`error: ${err}`);
+                                });
+                            }
+                            // check if it is of valid format ..
+                            else if (_functions.isValidDate(posted_loan.due) === true) {
+                                _functions.sendResponse(422, res, 'Due field should be of format yyyy-mm-dd');
+                                transaction.rollback((err0) => { // ROLLBACK
+                                    if (err) console.log(`error: ${err}`);
+                                });
+                            }
+                            // check that it is not int the past
+                            else if (_dueDate < now) {
+                                _functions.sendResponse(422, res, 'Due date can not be in the past');
+                                transaction.rollback((err0) => { // ROLLBACK
+                                    if (err) console.log(`error: ${err}`);
+                                });
+                            }
+                            else if ((posted_loan.due) > x.Checkout) {
+                                var dueDate = new Date(posted_loan.due);
+                                var checkoutDate = new Date( x.Checkout);
+                                const diffTime = Math.abs(dueDate - checkoutDate);
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                                if (diffDays > 90) {
+                                    _functions.sendResponse(422, res, 'Due date can not be more than 90 from checkout date');
+                                    transaction.rollback((err) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`)
+                                    });
+
+                                } else if (posted_loan.returned == undefined) {
+                                    const parameters = [
+                                        posted_loan.checkout ?? x.Checkout,
+                                        posted_loan.due ?? x.Due,
+                                        x.Returned,
+                                        loanId
+                                    ];
+                                    UpdateLoanValues(res, transaction, parameters, err);
+                                    transaction.commit((errorCommit) => { // COMMIT
+                                        if (err) console.log(`error: ${errorCommit}`);
+                                    });
+                                }
+                                else if (posted_loan.returned != undefined) {
+
+                                    // check if its empty strings
+                                    if (_functions.isBlank(posted_loan.returned)) {
+                                        _functions.sendResponse(422, res, 'returned field can not be empty strings.');
+                                        transaction.rollback((err0) => { // ROLLBACK
+                                            if (err) console.log(`error: ${err}`);
+                                        });
+                                    }
+                                    // check format
+                                    else if (posted_loan.returned.trim().toLowerCase() != "true" && posted_loan.returned.trim().toLowerCase() != "false") {
+                                        _functions.sendResponse(422, res, 'returned values can be only true or false');
+                                        transaction.rollback((err0) => { // ROLLBACK
+                                            if (err) console.log(`error: ${err}`);
+                                        });
+                                    }
+                                    // all ok send response!
+                                    else {
+                                        const parameters = [
+                                            posted_loan.checkout ?? x.Checkout,
+                                            posted_loan.due ?? x.Due,
+                                            _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.Returned,
+                                            loanId
+                                        ];
+                                        UpdateLoanValues(res, transaction, parameters, err);
+                                        transaction.commit((errorCommit) => { // COMMIT
+                                            if (err) console.log(`error: ${errorCommit}`);
+                                        });
+                                    }
+
+                                }
+                            }
+                            else if (posted_loan.returned == undefined) {
+                                const parameters = [
+                                    posted_loan.checkout ?? x.Checkout,
+                                    posted_loan.due ?? x.Due,
+                                    x.Returned,
+                                    loanId
+                                ];
+                                UpdateLoanValues(res, transaction, parameters, err);
+                                transaction.commit((errorCommit) => { // COMMIT
+                                    if (err) console.log(`error: ${errorCommit}`);
+                                });
+                            }
+                            else if (posted_loan.returned != undefined) {
+
+                                // check if its empty strings
+                                if (_functions.isBlank(posted_loan.returned)) {
+                                    _functions.sendResponse(422, res, 'returned field can not be empty strings.');
+                                    transaction.rollback((err0) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                                }
+                                // check format
+                                else if (posted_loan.returned.trim().toLowerCase() != "true" && posted_loan.returned.trim().toLowerCase() != "false") {
+                                    _functions.sendResponse(422, res, 'returned values can be only true or false');
+                                    transaction.rollback((err0) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                                }
+                                // all ok send response!
+                                else {
+                                    const parameters = [
+                                        posted_loan.checkout ?? x.Checkout,
+                                        posted_loan.due ?? x.Due,
+                                        _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.Returned,
+                                        loanId
+                                    ];
+                                    UpdateLoanValues(res, transaction, parameters, err);
+                                    transaction.commit((errorCommit) => { // COMMIT
+                                        if (err) console.log(`error: ${errorCommit}`);
+                                    });
+                                }
+
+                            }
+
+
+                        }
+                        else   if (posted_loan.due == undefined) {
+                            
+                            if (posted_loan.returned == null) {
+                                 _functions.sendResponse(422, res, 'returned field can not bet null.');
+                                    transaction.rollback((err0) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                            }
+                            else if (posted_loan.returned != undefined) {
+
+                                // check if its empty strings
+                                if (_functions.isBlank(posted_loan.returned) || posted_loan.returned ==null) {
+                                    _functions.sendResponse(422, res, 'returned field can not be empty strings.');
+                                    transaction.rollback((err0) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                                }
+                                // check format
+                                else if (posted_loan.returned.trim().toLowerCase() != "true" && posted_loan.returned.trim().toLowerCase() != "false") {
+                                    _functions.sendResponse(422, res, 'returned values can be only true or false');
+                                    transaction.rollback((err0) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                                }
+                                // all ok send response!
+                                else {
+                                    const parameters = [
+                                        posted_loan.checkout ?? x.Checkout,
+                                        posted_loan.due ?? x.Due,
+                                        _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.Returned,
+                                        loanId
+                                    ];
+                                    UpdateLoanValues(res, transaction, parameters, err);
+                                    transaction.commit((errorCommit) => { // COMMIT
+                                        if (err) console.log(`error: ${errorCommit}`);
+                                    });
+                                }
+
+                            }
+                        }
+
+                    }
+
+
 
                 }
 
-            });
+
+
+            })
 
         });
 
     }
-};
+
+}
+
+
+
+
 
 
 

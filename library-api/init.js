@@ -91,9 +91,9 @@ db.serialize(() => {
 // ---------------
 db.serialize(() => {
     // create 'Loan' table if needed
-    db.run(`CREATE TABLE IF NOT EXISTS Bibliography (
+    db.run(`CREATE TABLE IF NOT EXISTS Bibliographies (
+        id INTEGER not null PRIMARY KEY AUTOINCREMENT ,
         ModuleCODE TEXT  not null, BookID INTEGER  not null,
-        PRIMARY KEY(ModuleCODE, BookID),
         FOREIGN KEY (BookID) 
          REFERENCES Book (id) 
           ON DELETE CASCADE 
@@ -105,18 +105,18 @@ db.serialize(() => {
         )` ,
     
     [], function (err) {
-        if (err) console.log(`error while creating table 'Bibliography': ${err}`)
-        else console.log(`table created: 'Bibliography'`)
+        if (err) console.log(`error while creating table 'Bibliographies': ${err}`)
+        else console.log(`table created: 'Bibliographies'`)
     });
 
 });
 
 // db.serialize(() => {
 //     // create 'Loan' table if needed
-//     db.run(`DROP TABLE Loans` ,
+//     db.run(`DROP TABLE Bibliography` ,
     
 //     [], function (err) {
 //         if (err) console.log(`error while deleting table 'students': ${err}`)
-//         else console.log(`table deleted: 'students'`)
+//         else console.log(`table deleted: 'Bibliography'`)
 //     });
 // });

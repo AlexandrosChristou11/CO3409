@@ -49,7 +49,8 @@ db.serialize(() => {
 // -----------
 db.serialize(() => {
     // create 'accounts' table if needed
-    db.run(`CREATE TABLE IF NOT EXISTS Modules (Code TEXT PRIMARY KEY not null UNIQUE, Name TEXT not null)` ,
+    db.run(`CREATE TABLE IF NOT EXISTS Modules (id INTEGER not null PRIMARY KEY AUTOINCREMENT UNIQUE ,
+        Code TEXT not null UNIQUE, Name TEXT not null)` ,
     
     [], function (err) {
         if (err) console.log(`error while creating table 'Module': ${err}`)
@@ -113,10 +114,10 @@ db.serialize(() => {
 
 // db.serialize(() => {
 //     // create 'Loan' table if needed
-//     db.run(`DROP TABLE Bibliography` ,
+//     db.run(`DROP TABLE Modules` ,
     
 //     [], function (err) {
 //         if (err) console.log(`error while deleting table 'students': ${err}`)
-//         else console.log(`table deleted: 'Bibliography'`)
+//         else console.log(`table deleted: 'Books'`)
 //     });
 // });

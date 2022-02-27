@@ -30,17 +30,24 @@ router.put('/library/student/edit/:id', studentController.EditStudent);
 // (C) MODULE
 router.post('/library/module/add', moduleController.AddNewModule);
 router.get('/library/modules', moduleController.GetModules);
+router.get('/library/module/get/:id', moduleController.GetModuleById);
 router.get('/library/module/:code', moduleController.GetModuleByCode);
 router.get('/library/module', moduleController.GetModuleByNameQuery);
 router.put('/library/module/edit/:code', moduleController.EditModule);
 
 // (D) LOAN
-router.post('/library/bibliography/add', bibliographyController.AddNewBibliography );
+router.post('/library/loan/add', loanController.AddNewLoan);
 router.get('/library/loans', loanController.GetLoans );
 router.get('/library/loans/book/:bookId', loanController.GetLoansByBookId );
+router.get('/library/loans/student/:studentId', loanController.GetLoansByStudentId );
 router.put('/library/loans/edit/:loanId', loanController.EditLoan );
 
 // (E) BIBLIOGRAPHY
+router.post('/library/bibliography/add', bibliographyController.AddNewBibliography);
+router.get('/library/bibliographies', bibliographyController.GetBibliographies );
+router.get('/library/bibliographies/get/:ModuleCODE', bibliographyController.GetBibliographiesByModuleCode );
+router.delete('/library/bibliography/delete', bibliographyController.DeleteBibliography );
+
 
 
 // 4. 

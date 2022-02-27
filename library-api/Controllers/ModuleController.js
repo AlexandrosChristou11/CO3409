@@ -16,15 +16,17 @@ const AddNewModule = (req, res) => {
     const posted_module = req.body; // submitted module - picked from body
 
 
-    if (!posted_module || !posted_module.Name || !posted_module.Code || _functions.isBlank(posted_module.Name) || _functions.isBlank(posted_module.Code)) {
-        res.status(422) // bad request
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Invalid Module format !!` });
+    if (!posted_module || !posted_module.Name ||
+        !posted_module.Code || _functions.isBlank(posted_module.Name)
+        || _functions.isBlank(posted_module.Code) || posted_module.Code == ""
+        || posted_module.Name == "") {
+        _functions.sendResponse(422, res, `Module's attributes must be defined!`);
 
     } else {
-
+        var code = posted_module.Code.trim().toLowerCase();
+        var name = posted_module.Name.trim().toLowerCase();
         db.run('INSERT INTO Modules (Code, Name) VALUES (?,?)',
-            [posted_module.Code, posted_module.Name],
+            [code, name],
             function (error) {
 
                 if (error) {
@@ -54,7 +56,7 @@ const AddNewModule = (req, res) => {
 // GET: {local}/library/modules
 const GetModules = (req, res) => {
     var modules = [];
-    db.all('SELECT Code, Name from Modules', (err, rows) => {
+    db.all('SELECT id, Code, Name from Modules', (err, rows) => {
         if (err) {
             console.error('Problem while querying database: ' + err);
             res.status(500) // internal server error ..
@@ -73,11 +75,46 @@ const GetModules = (req, res) => {
 
 }
 
+// GET: {local}/library/module/get/:id
+const GetModuleById = (req, res) => {
+    const { id } = req.params;
+
+    if (_functions.isBlank(id)) {
+        _functions.sendResponse(422, res, `Module id can not be empty`)
+    }
+    else if (isNaN(id)) {
+        _functions.sendResponse(422, res, `Module id must be an Integer.`)
+    }
+
+    else {
+        db.get('SELECT id ,Code, Name from Modules WHERE id = ?', [id], (err, rows) => {
+
+            if (err) {
+                console.error('Problem while querying database: ' + err);
+                _functions.sendResponse(500, res, `SERVER || ERROR`)
+            }
+
+            else if (!rows) {
+                _functions.sendResponse(422, res, `Module with id: ${id} was not found ..`);
+
+            }
+            else {
+                res.status(200)
+                    .setHeader('content-type', 'application/json')
+                    .send({ Code: rows.Code, Name: rows.Name });
+            }
+
+        });
+    }
+
+}
+
 
 // GET: {local}/library/module/:code
 const GetModuleByCode = (req, res) => {
     const { code } = req.params;
-    db.get('SELECT Code, Name from Modules WHERE Code = ?', [code.trim()], (err, rows) => {
+
+    db.get('SELECT Code, Name from Modules WHERE Code = ?', [code.trim().toLowerCase()], (err, rows) => {
 
         if (err) {
             console.error('Problem while querying database: ' + err);
@@ -85,16 +122,14 @@ const GetModuleByCode = (req, res) => {
                 .setHeader('content-type', 'application/json')
                 .send({ error: "Problem while querying database" });
         }
-
-        if (_functions.isBlank(code)) {
-            res.status(422)
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Module code is of invalid format" });
+        else if (_functions.isBlank(code)) {
+            _functions.sendResponse(422, res, `Module code can not be empty..`);
+        }
+        else if (!isNaN(code)) {
+            _functions.sendResponse(422, res, `Module code is not only numbers ..`);
         }
         else if (!rows) {
-            res.status(404)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Module with code: ${code} was not found ..` });
+            _functions.sendResponse(422, res, `Module with code: ${code} was not found ..`);
         }
         else {
             res.status(200)
@@ -108,8 +143,8 @@ const GetModuleByCode = (req, res) => {
 
 // GET: {local}/library/module?Code= {code}
 const GetModuleByNameQuery = (req, res) => {
-    let name = req.query.Name;      // extract 'name' from request
-    let param = '%' + name + '%';
+    let name = req.query.Name.toLowerCase();      // extract 'name' from request
+    let param = '%' + name.toLowerCase() + '%';
     var modules = [];
     db.all('SELECT Code, Name from Modules WHERE Name LIKE ?', param, (err, rows) => {
 
@@ -152,9 +187,9 @@ const EditModule = (req, res) => {
     if (!code || _functions.isBlank(code)) {
         res.status(422)
             .setHeader('content-type', 'application/json')
-            .send({ error: `Module Code is of invalid format` }); // resource not found
+            .send({ error: `Module Code can not be empty` }); // resource not found
     } else {
-        db.get(`SELECT Code, Name from Modules WHERE Code = ?`, [code], (err, row) => {
+        db.get(`SELECT id, Code, Name from Modules WHERE Code = ?`, [code.trim().toLowerCase()], (err, row) => {
 
             if (err) {
                 res.status(500)
@@ -162,12 +197,12 @@ const EditModule = (req, res) => {
                     .send({ error: "Server error: " + err });
             }
             else {
-            
-                if ((posted_module.Name && _functions.isBlank(posted_module.Name)) ||
-                    (posted_module.Code && _functions.isBlank(posted_module.Code))) {
+
+                if ((posted_module.Name && _functions.isBlank(posted_module.Name) || posted_module.Name == "") ||
+                    (posted_module.Code && _functions.isBlank(posted_module.Code) || posted_module.Code == "")) {
                     res.status(422)
                         .setHeader('content-type', 'application/json')
-                        .send({ error: `Invalid structure of JSON Parameters` }); // resource not found
+                        .send({ error: `Update values can not be empty` }); // resource not found
                 }
 
 
@@ -179,11 +214,12 @@ const EditModule = (req, res) => {
                 else { // student found, let's update it
 
                     const parameters = [
-                        posted_module.Code ?? row.Code,
-                        posted_module.Name ?? row.Name,
-                        code];
+                        posted_module.Code == undefined ?  row.Code :  posted_module.Code.toString().toLowerCase(),
+                        posted_module.Name == undefined ? row.Name : posted_module.Name.toString().toLowerCase(),
+                        code.trim().toLowerCase()
+                    ];
 
-                    db.run(`UPDATE Modules SET Code = ?, Name = ? WHERE Code=?`, parameters, (err) => {
+                    db.run(`UPDATE Modules SET Code = ?, Name = ? WHERE Code = ?`, parameters, (err) => {
                         if (err) {
                             if (err.code === 'SQLITE_CONSTRAINT') {
                                 res.status(409) // resource already exists
@@ -208,4 +244,4 @@ const EditModule = (req, res) => {
 
 
 
-module.exports = { AddNewModule, GetModules, GetModuleByCode, GetModuleByNameQuery, EditModule };
+module.exports = { AddNewModule, GetModules, GetModuleByCode, GetModuleByNameQuery, EditModule, GetModuleById };

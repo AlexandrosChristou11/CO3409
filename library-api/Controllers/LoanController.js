@@ -10,7 +10,7 @@ let db = new sqlite3.Database('./db/library.db', sqlite3.OPEN_READWRITE | sqlite
 
 const e = require('express');
 const _functions = require('../Generic Methods/GlobalFunctions'); // import the routes
-const { post } = require('../Routes/book');
+const { post } = require('../Routes/API');
 
 
 var tdb = new TransactionDatabase(db); // wrap database into a transaction object ..
@@ -40,7 +40,20 @@ const AddNewLoan = (req, res) => {
         console.log(`BOOK ID: ${posted_loan.BookID} | STUDENT ID: ${posted_loan.StudentID} | Due: ${posted_loan.Due}`)
         tdb.beginTransaction(async function (err, transaction) { // BEGIN TRANSACTION
 
-
+            // Check if empty..
+            if (!_functions.isDateEmpty(posted_loan.Due)) {
+                _functions.sendResponse(422, res, 'Due field can not be empty.');
+                transaction.rollback((err) => { // ROLLBACK
+                    if (err) console.log(`error: ${err}`);
+                });
+            }
+            // check if it is of valid format ..
+            else if (_functions.isValidDate(posted_loan.Due) === true) {
+                _functions.sendResponse(422, res, 'Due field should be of format yyyy-mm-dd');
+                transaction.rollback((err0) => { // ROLLBACK
+                    if (err) console.log(`error: ${err}`);
+                });
+            }
 
             // Check Due (date) format
             if (dateDue >= currentDate) {
@@ -57,109 +70,140 @@ const AddNewLoan = (req, res) => {
                 }
                 else {
 
-                    transaction.get(`SELECT BookID, StudentID, Returned from Loans where BookID = ? AND StudentID = ? AND Returned = false`,
-                        [posted_loan.BookID, posted_loan.StudentID], (err, target_row) => {
 
-                            // Student already loans this book
-                            if (target_row) {
-                                transaction.rollback((err) => { // ROLLBACK
-                                    if (err) console.log(`error: ${err}`);
-                                });
+                    transaction.get(`SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?`, posted_loan.BookID, (e, j) => {
 
-                                console.log(`Student with id: ${posted_loan.StudentID} already loans book with id ${posted_loan.BookID}`)
-                                res.status(422) // bad request
-                                    .setHeader('content-type', 'application/json')
-                                    .send({ error: `Student with id: ${posted_loan.StudentID} already loans book with id ${posted_loan.BookID}` })
-                            }
-                            // No such entry exist .. move to next steps ..
-                            else {
-                                transaction.get(`SELECT id, Loanable, Quantity from Books where id = ?`, [posted_loan.BookID], (err, x) => {
+                        if (!j) {
+                            transaction.rollback((err) => { // ROLLBACK
+                                if (err) console.log(`error: ${err}`);
+                            });
+                            _functions.sendResponse(404, res, `Book id ${posted_loan.BookID} does not exist`);
+                        }
+                        else if (j) {
+                            transaction.get(`SELECT ID, Name, YOB from Students where ID=?`, posted_loan.StudentID, (e, student) => {
 
-                                    // Book can not be lent ..
-                                    if (!x.Loanable) {
-                                        transaction.rollback((err) => { // ROLLBACK
-                                            if (err) console.log(`error: ${err}`);
-                                        });
+                                if (!student) {
+                                    transaction.rollback((err) => { // ROLLBACK
+                                        if (err) console.log(`error: ${err}`);
+                                    });
+                                    _functions.sendResponse(404, res, `Student with id ${posted_loan.StudentID} does not exist`);
+                                }
+                                else if (student) {
+                                    transaction.get(`SELECT BookID, StudentID, Returned from Loans where BookID = ? AND StudentID = ? AND Returned = false`,
+                                        [posted_loan.BookID, posted_loan.StudentID], (err, target_row) => {
 
-                                        res.status(422)
-                                            .setHeader('content-type', 'application/json')
-                                            .send({ error: `Book with Id ${posted_loan.BookID} can not be lent` })
-                                    }
-                                    // Book can be lent .. move to next actions ..
-                                    else {
-                                        // get the quantity of the already loan books ..
-                                        transaction.get(`SELECT COUNT(BookId) as Count FROM Loans WHERE BookID = ? AND Returned = false`, posted_loan.BookID, (er, c) => {
-
-                                            if (c.Count >= x.Quantity) {
+                                            // Student already loans this book
+                                            if (target_row) {
                                                 transaction.rollback((err) => { // ROLLBACK
                                                     if (err) console.log(`error: ${err}`);
                                                 });
-                                                res.status(422)
+
+                                                console.log(`Student with id: ${posted_loan.StudentID} already loans book with id ${posted_loan.BookID}`)
+                                                res.status(422) // bad request
                                                     .setHeader('content-type', 'application/json')
-                                                    .send({ error: `No other books available to loan` })
-                                            } else {
-                                                var parameters = [
-                                                    posted_loan.BookID,
-                                                    posted_loan.StudentID,
-                                                    dateDue.toISOString().slice(0, 10),
-                                                    currentDate.toISOString().slice(0, 10)
-                                                ];
-                                                transaction.run(`INSERT INTO Loans (BookID, StudentId, Due, Checkout) VALUES(?, ?, ?, ?)`, parameters, (errorTransaction) => {
-                                                    console.log(`TRANSACTION ERROR | ${errorTransaction}`)
-                                                    if (errorTransaction) {
-                                                        if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
-                                                            transaction.rollback((err) => { // ROLLBACK
-                                                                if (err) console.log(`error: ${err}`);
-                                                            });
-                                                            res.status(409)
-                                                                .setHeader('content-type', 'application/json')
-                                                                .send({ error: `Contraint Error | ${errorTransaction.message}` })
-                                                        }
-                                                        else {
-                                                            transaction.rollback((err) => { // ROLLBACK
-                                                                if (err) console.log(`error: ${err}`);
-                                                            });
-                                                            res.status(500)
-                                                                .setHeader('content-type', 'application/json')
-                                                                .send({ errorTransaction })
-                                                        }
-                                                    }
-                                                    else {
-                                                        transaction.commit((errorCommit) => { // COMMIT
-                                                            if (err) console.log(`error: ${errorCommit}`);
+                                                    .send({ error: `Student with id: ${posted_loan.StudentID} already loans book with id ${posted_loan.BookID}` })
+                                            }
+                                            // No such entry exist .. move to next steps ..
+                                            else {
+                                                transaction.get(`SELECT id, Loanable, Quantity from Books where id = ?`, [posted_loan.BookID], (err, x) => {
+
+                                                    // Book can not be lent ..
+                                                    if (!x.Loanable) {
+                                                        transaction.rollback((err) => { // ROLLBACK
+                                                            if (err) console.log(`error: ${err}`);
                                                         });
 
-                                                        res.status(200)
+                                                        res.status(422)
                                                             .setHeader('content-type', 'application/json')
-                                                            .send({ message: "Loan added", id: this.lastID });
+                                                            .send({ error: `Book with Id ${posted_loan.BookID} can not be lent` })
+                                                    }
+                                                    // Book can be lent .. move to next actions ..
+                                                    else {
+                                                        // get the quantity of the already loan books ..
+                                                        transaction.get(`SELECT COUNT(BookId) as Count FROM Loans WHERE BookID = ? AND Returned = false`, posted_loan.BookID, (er, c) => {
+
+                                                            if (c.Count >= x.Quantity) {
+                                                                transaction.rollback((err) => { // ROLLBACK
+                                                                    if (err) console.log(`error: ${err}`);
+                                                                });
+                                                                res.status(422)
+                                                                    .setHeader('content-type', 'application/json')
+                                                                    .send({ error: `No other books available to loan` })
+                                                            } else {
+                                                                var parameters = [
+                                                                    posted_loan.BookID,
+                                                                    posted_loan.StudentID,
+                                                                    dateDue.toISOString().slice(0, 10),
+                                                                    currentDate.toISOString().slice(0, 10)
+                                                                ];
+                                                                transaction.run(`INSERT INTO Loans (BookID, StudentId, Due, Checkout) VALUES(?, ?, ?, ?)`, parameters, (errorTransaction) => {
+                                                                    console.log(`TRANSACTION ERROR | ${errorTransaction}`)
+                                                                    if (errorTransaction) {
+                                                                        if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
+                                                                            transaction.rollback((err) => { // ROLLBACK
+                                                                                if (err) console.log(`error: ${err}`);
+                                                                            });
+                                                                            res.status(409)
+                                                                                .setHeader('content-type', 'application/json')
+                                                                                .send({ error: `Contraint Error | ${errorTransaction.message}` })
+                                                                        }
+                                                                        else {
+                                                                            transaction.rollback((err) => { // ROLLBACK
+                                                                                if (err) console.log(`error: ${err}`);
+                                                                            });
+                                                                            res.status(500)
+                                                                                .setHeader('content-type', 'application/json')
+                                                                                .send({ errorTransaction })
+                                                                        }
+                                                                    }
+                                                                    else {
+                                                                        transaction.commit((errorCommit) => { // COMMIT
+                                                                            if (err) console.log(`error: ${errorCommit}`);
+                                                                        });
+
+                                                                        res.status(200)
+                                                                            .setHeader('content-type', 'application/json')
+                                                                            .send({ message: "Loan added", id: this.lastID });
+                                                                    }
+
+                                                                });
+                                                                transaction.commit((errorCommit) => { // COMMIT
+                                                                    if (err) console.log(`error: ${errorCommit}`);
+                                                                });
+
+                                                            }
+
+
+                                                        })
+
                                                     }
 
-                                                });
-                                                transaction.commit((errorCommit) => { // COMMIT
-                                                    if (err) console.log(`error: ${errorCommit}`);
-                                                });
 
+                                                }
+
+
+                                                )
                                             }
 
 
-                                        })
-
-                                    }
-
+                                        });
 
                                 }
 
+                            });
 
-                                )
-                            }
+                        }
 
 
-                        });
+                    });
+
+
                 }
             } else {
                 transaction.rollback((err) => { // ROLLBACK
                     if (err) console.log(`error: ${err}`);
                 });
+                _functions.sendResponse(422,res, `Due date can not be in the past`);
 
             }
         });
@@ -191,11 +235,8 @@ const GetLoans = (req, res) => {
 
 }
 
-// https://stackoverflow.com/questions/15128849/using-multiple-parameters-in-url-in-express
 
 
-// TODOO ... :
-// Also make a query on books table and check whether the book exists or not ..
 // GET: {local} /library/loans/book/:bookId?pending=true
 const GetLoansByBookId = (req, res) => {
     const { bookId } = req.params;
@@ -216,7 +257,7 @@ const GetLoansByBookId = (req, res) => {
 
         let id = parseInt(bookId);
         // check if bood id exist ..
-        db.get('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE WHERE ID=?', [id], (e, x => {
+        db.get('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE  ID=?', id, (e, x )=> {
 
             // No such book exist ..
             if (!x || id == 0) {
@@ -296,7 +337,7 @@ const GetLoansByBookId = (req, res) => {
 
             }
 
-        }));
+        });
     }
 }
 
@@ -340,7 +381,7 @@ const GetLoansByStudentId = (req, res) => {
                                 .setHeader('content-type', 'application/json')
                                 .send({ err: "Problem while querying database" });
                         }
-                        else
+                        else{
                             rows.forEach(row =>
                                 _studentsBooks.push({ BookID: row.BookID, StudentID: row.StudentID, Checkout: row.Checkout, Due: row.Due, Returned: row.Returned }));
 
@@ -354,6 +395,7 @@ const GetLoansByStudentId = (req, res) => {
                                 .setHeader('content-type', 'application/json')
                                 .send(_studentsBooks);
                         }
+                    }
 
                     });
 
@@ -536,556 +578,7 @@ async function ContinueWithNextValidations(posted_loan, transaction, due, checko
 
 
 
-// // PUT: {local}/library/loans/edit/{:loanId}
-// const EditLoan = (req, res) => {
-//     const { loanId } = req.params;            // get loanId from params
 
-//     const posted_loan = req.body;           // submitted loan
-
-//     if (!loanId || _functions.isBlank(loanId)) {
-//         res.status(422)
-//             .setHeader('content-type', 'application/json')
-//             .send({ error: `Loan Id can not be empty` });
-//     }
-//     else if (isNaN(loanId)) {
-//         res.status(422)
-//             .setHeader('content-type', 'application/json')
-//             .send({ error: `Loan id should be an integer` }); // resource not found
-//     }
-
-//     else {
-
-//         tdb.beginTransaction(async function (err, transaction) { // BEGIN TRANSACTION
-
-//             // Check whether LoanId exists in the dataset ..
-//             transaction.get('SELECT id, BookId, StudentId, Checkout, Due, Returned FROM Loans WHERE id = ? ', [loanId], (e, x) => {
-
-
-//                 // loan id does not exist ..
-//                 if (!x || loanId == 0) {
-
-//                     transaction.rollback((err) => { // ROLLBACK
-//                         if (err) console.log(`error: ${err}`)
-//                     });
-//                     res.status(422)
-//                         .setHeader('content-type', 'application/json')
-//                         .send({ error: `Loan id does not exist ..` }); // resource not found
-
-//                 }
-//                 // Loan id exist .. move to next conditions ..
-//                 else {
-//                     var due = new Date(posted_loan.due);
-//                     var checkout = new Date(posted_loan.checkout);
-//                     var returned = posted_loan.returned;
-
-//                     var now = new Date();
-
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-//                     //                              CHECKOUT VALIDATION 
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-//                     if (posted_loan.checkout != undefined) {
-
-//                         // check if checkout is not empty string ..
-//                         if (isNaN(checkout) || checkout.toString().trim() == '') {
-//                             transaction.rollback((err) => { // ROLLBACK
-//                                 if (err) console.log(`error: ${err}`)
-//                             });
-//                             res.status(422)
-//                                 .setHeader('content-type', 'application/json')
-//                                 .send({ error: `Checkout field can not be empty!` }); // resource not found
-//                         }
-//                         else if (!isValidDate(checkout)) {
-//                             transaction.rollback((err) => { // ROLLBACK
-//                                 if (err) console.log(`error: ${err}`)
-//                             });
-//                             res.status(422)
-//                                 .setHeader('content-type', 'application/json')
-//                                 .send({ error: `Checkout field has invalid format. Please use the format of: yyyy-mm-dd` }); // resource not found
-
-
-//                         }
-//                         else {
-
-//                             if (posted_loan.due != undefined) {
-
-//                                 // check if its empty ..
-//                                 if ((isNaN(due) || posted_loan.due.toString().trim() == '')) {
-//                                     transaction.rollback((err) => { // ROLLBACK
-//                                         if (err) console.log(`error: ${err}`)
-//                                     });
-//                                     res.status(422)
-//                                         .setHeader('content-type', 'application/json')
-//                                         .send({ error: `Due field can not be empty` }); // resource not found
-
-//                                 }
-//                                 // check if due is not date format
-//                                 else if (!isValidDate(due)) {
-//                                     transaction.rollback((err) => { // ROLLBACK
-//                                         if (err) console.log(`error: ${err}`)
-//                                     });
-//                                     res.status(422)
-//                                         .setHeader('content-type', 'application/json')
-//                                         .send({ error: `Due field has invalid format. Please use the format of: yyyy-mm-dd/` }); // resource not found
-
-
-//                                 }
-//                                 // check if due is not 90days more than the checkout
-//                                 else if ((due > checkout && checkout != undefined) || (due > x.Checkout)) {
-
-//                                     const diffTime = Math.abs(due) - checkout ?? x.Checkout;
-//                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-//                                     if (diffDays > 90) {
-
-//                                         transaction.rollback((err) => { // ROLLBACK
-//                                             if (err) console.log(`error: ${err}`)
-//                                         });
-//                                         res.status(422) // bad request
-//                                             .setHeader('content-type', 'application/json')
-//                                             .send({ error: `Due date must be less than 90 days from Checkout` });
-
-//                                     }
-//                                     else if (due < now) {
-//                                         transaction.rollback((err) => { // ROLLBACK
-//                                             if (err) console.log(`error: ${err}`)
-//                                         });
-
-//                                         res.status(422) // bad request
-//                                             .setHeader('content-type', 'application/json')
-//                                             .send({ error: `Due date can not be in the past.` })
-
-//                                     }
-//                                     // check if due is not lower than checkout
-//                                     else if (due < checkout || due < x.checkout) {
-//                                         transaction.rollback((err) => { // ROLLBACK
-//                                             if (err) console.log(`error: ${err}`)
-//                                         });
-
-//                                         res.status(422) // bad request
-//                                             .setHeader('content-type', 'application/json')
-//                                             .send({ error: `Due date can not be before checkout date` })
-//                                     } else {
-//                                         // returned field validatoin ..
-//                                         if (posted_loan.returned != undefined) {
-
-//                                             // check if its not empty strings ..
-//                                             if (_functions.isBlank(returned)) {
-
-//                                                 transaction.rollback((err) => { // ROLLBACK
-//                                                     if (err) console.log(`error: ${err}`)
-//                                                 });
-//                                                 res.status(422)
-//                                                     .setHeader('content-type', 'application/json')
-//                                                     .send({ error: "Returned parameter can not be empty!" });
-//                                             }
-//                                             // check if values an not in 'true' or 'false'
-//                                             else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
-
-
-//                                                 res.status(422)
-//                                                     .setHeader('content-type', 'application/json')
-//                                                     .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
-//                                                 transaction.rollback((err) => { // ROLLBACK
-//                                                     if (err) console.log(`error: ${err}`)
-//                                                 });
-//                                             } else {
-
-//                                                 const parameters = [
-//                                                     posted_loan.checkout ?? x.Checkout,
-//                                                     posted_loan.due ?? x.Due,
-//                                                     posted_loan.returned ?? x.returned,
-//                                                     loanId
-//                                                 ];
-
-//                                                 transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
-
-//                                                     if (errorTransaction) {
-//                                                         if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
-//                                                             transaction.rollback((err) => { // ROLLBACK
-//                                                                 if (err) console.log(`error: ${err}`);
-//                                                             });
-//                                                             transaction.rollback((err) => { // ROLLBACK
-//                                                                 if (err) console.log(`error: ${err}`);
-//                                                             });
-//                                                             res.status(409)
-//                                                                 .setHeader('content-type', 'application/json')
-//                                                                 .send({ error: `Contraint Error | ${errorTransaction.message}` })
-//                                                         }
-//                                                         else {
-//                                                             transaction.rollback((err) => { // ROLLBACK
-//                                                                 if (err) console.log(`error: ${err}`);
-//                                                             });
-//                                                             res.status(500)
-//                                                                 .setHeader('content-type', 'application/json')
-//                                                                 .send({ errorTransaction })
-//                                                         }
-//                                                     }
-//                                                     else {
-//                                                         transaction.commit((errorCommit) => { // COMMIT
-//                                                             if (err) console.log(`error: ${errorCommit}`);
-//                                                         });
-
-//                                                         res.status(200)
-//                                                             .setHeader('content-type', 'application/json')
-//                                                             .send({ message: "Loan updated", id: this.lastID });
-//                                                     }
-
-//                                                 });
-//                                                 transaction.commit((errorCommit) => { // COMMIT
-//                                                     if (err) console.log(`error: ${errorCommit}`);
-//                                                 });
-
-//                                             }
-
-//                                         }else{
-//                                             ContinueWithNextValidations(posted_loan, transaction, due, checkout, returned, res);
-//                                         }
-
-//                                     }
-
-//                                 }
-//                                 // check if due is not in the past ..
-//                                 else {
-//                                     ContinueWithNextValidations(posted_loan, transaction, due, checkout, returned, res);
-
-//                                 }
-//                             }
-
-//                             // returned field validatoin ..
-//                             else if (posted_loan.returned != undefined) {
-
-//                                 // check if its not empty strings ..
-//                                 if (_functions.isBlank(returned)) {
-
-//                                     transaction.rollback((err) => { // ROLLBACK
-//                                         if (err) console.log(`error: ${err}`)
-//                                     });
-//                                     res.status(422)
-//                                         .setHeader('content-type', 'application/json')
-//                                         .send({ error: "Returned parameter can not be empty!" });
-//                                 }
-//                                 // check if values an not in 'true' or 'false'
-//                                 else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
-
-
-//                                     res.status(422)
-//                                         .setHeader('content-type', 'application/json')
-//                                         .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
-//                                     transaction.rollback((err) => { // ROLLBACK
-//                                         if (err) console.log(`error: ${err}`)
-//                                     });
-//                                 } else {
-
-//                                     const parameters = [
-//                                         posted_loan.checkout ?? x.Checkout,
-//                                         posted_loan.due ?? x.Due,
-//                                         posted_loan.returned ?? x.returned,
-//                                         loanId
-//                                     ];
-
-//                                     transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
-
-//                                         if (errorTransaction) {
-//                                             if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
-//                                                 transaction.rollback((err) => { // ROLLBACK
-//                                                     if (err) console.log(`error: ${err}`);
-//                                                 });
-//                                                 transaction.rollback((err) => { // ROLLBACK
-//                                                     if (err) console.log(`error: ${err}`);
-//                                                 });
-//                                                 res.status(409)
-//                                                     .setHeader('content-type', 'application/json')
-//                                                     .send({ error: `Contraint Error | ${errorTransaction.message}` })
-//                                             }
-//                                             else {
-//                                                 transaction.rollback((err) => { // ROLLBACK
-//                                                     if (err) console.log(`error: ${err}`);
-//                                                 });
-//                                                 res.status(500)
-//                                                     .setHeader('content-type', 'application/json')
-//                                                     .send({ errorTransaction })
-//                                             }
-//                                         }
-//                                         else {
-//                                             transaction.commit((errorCommit) => { // COMMIT
-//                                                 if (err) console.log(`error: ${errorCommit}`);
-//                                             });
-
-//                                             res.status(200)
-//                                                 .setHeader('content-type', 'application/json')
-//                                                 .send({ message: "Loan updated", id: this.lastID });
-//                                         }
-
-//                                     });
-//                                     transaction.commit((errorCommit) => { // COMMIT
-//                                         if (err) console.log(`error: ${errorCommit}`);
-//                                     });
-
-//                                 }
-
-//                             }
-
-
-//                             else {
-
-//                                 const parameters = [
-//                                     posted_loan.checkout ?? x.Checkout,
-//                                     posted_loan.due ?? x.Due,
-//                                     posted_loan.returned ?? x.returned,
-//                                     loanId
-//                                 ];
-
-//                                 transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
-
-//                                     if (errorTransaction) {
-//                                         if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
-//                                             transaction.rollback((err) => { // ROLLBACK
-//                                                 if (err) console.log(`error: ${err}`);
-//                                             });
-//                                             transaction.rollback((err) => { // ROLLBACK
-//                                                 if (err) console.log(`error: ${err}`);
-//                                             });
-//                                             res.status(409)
-//                                                 .setHeader('content-type', 'application/json')
-//                                                 .send({ error: `Contraint Error | ${errorTransaction.message}` })
-//                                         }
-//                                         else {
-//                                             transaction.rollback((err) => { // ROLLBACK
-//                                                 if (err) console.log(`error: ${err}`);
-//                                             });
-//                                             res.status(500)
-//                                                 .setHeader('content-type', 'application/json')
-//                                                 .send({ errorTransaction })
-//                                         }
-//                                     }
-//                                     else {
-//                                         transaction.commit((errorCommit) => { // COMMIT
-//                                             if (err) console.log(`error: ${errorCommit}`);
-//                                         });
-
-//                                         res.status(200)
-//                                             .setHeader('content-type', 'application/json')
-//                                             .send({ message: "Loan updated", id: this.lastID });
-//                                     }
-
-//                                 });
-//                                 transaction.commit((errorCommit) => { // COMMIT
-//                                     if (err) console.log(`error: ${errorCommit}`);
-//                                 });
-//                             }
-
-//                         }
-
-
-//                     }
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-//                     //                             END OF  CHECKOUT VALIDATION 
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-//                     //                           DUE VALIDATION 
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-
-//                     // due field validation 
-//                     else if (posted_loan.due != undefined) {
-
-//                         // check if its empty ..
-//                         if (!(isNaN(due) || due.toString().trim() == '')) {
-//                             transaction.rollback((err) => { // ROLLBACK
-//                                 if (err) console.log(`error: ${err}`)
-//                             });
-//                             res.status(422)
-//                                 .setHeader('content-type', 'application/json')
-//                                 .send({ error: `Due field can not be empty` }); // resource not found
-
-//                         }
-//                         // check if due is not date format
-//                         else if (!isValidDate(posted_loan.due.toISOString().slice(0, 10))) {
-//                             transaction.rollback((err) => { // ROLLBACK
-//                                 if (err) console.log(`error: ${err}`)
-//                             });
-//                             res.status(422)
-//                                 .setHeader('content-type', 'application/json')
-//                                 .send({ error: `Due field has invalid format. Please use the format of: yyyy-mm-dd/` }); // resource not found
-
-
-//                         }
-//                         // check if due is not 90days more than the checkout
-//                         else if ((due > checkout && checkout != undefined) || (due > x.Checkout)) {
-
-//                             const diffTime = Math.abs(due) - checkout ?? x.Checkout;
-//                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-//                             if (diffDays > 90) {
-
-//                                 transaction.rollback((err) => { // ROLLBACK
-//                                     if (err) console.log(`error: ${err}`)
-//                                 });
-//                                 res.status(422) // bad request
-//                                     .setHeader('content-type', 'application/json')
-//                                     .send({ error: `Due date must be less than 90 days from Checkout` });
-
-//                             }  // check if due is not in the past ..
-//                             else if (due < now) {
-//                                 transaction.rollback((err) => { // ROLLBACK
-//                                     if (err) console.log(`error: ${err}`)
-//                                 });
-
-//                                 res.status(422) // bad request
-//                                     .setHeader('content-type', 'application/json')
-//                                     .send({ error: `Due date can not be in the past.` })
-
-//                             }
-//                             // check if due is not lower than checkout
-//                             else if (due < checkout || due < x.checkout) {
-//                                 transaction.rollback((err) => { // ROLLBACK
-//                                     if (err) console.log(`error: ${err}`)
-//                                 });
-
-//                                 res.status(422) // bad request
-//                                     .setHeader('content-type', 'application/json')
-//                                     .send({ error: `Due date can not be before checkout date` })
-//                             }
-
-
-//                         }
-
-
-//                     }
-
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-//                     //                                  END OF  DUE VALIDATION 
-//                     //---------------------------------------------------------------------------------------------------------------------------------------------
-
-//                     // returned field validatoin ..
-//                     else if (posted_loan.returned != undefined) {
-
-//                         // check if its not empty strings ..
-//                         if (_functions.isBlank(returned)) {
-
-//                             transaction.rollback((err) => { // ROLLBACK
-//                                 if (err) console.log(`error: ${err}`)
-//                             });
-//                             res.status(422)
-//                                 .setHeader('content-type', 'application/json')
-//                                 .send({ error: "Returned parameter can not be empty!" });
-//                         }
-//                         // check if values an not in 'true' or 'false'
-//                         else if (returned.trim().toLowerCase() != "true" && returned.trim().toLowerCase() != "false") {
-
-
-//                             res.status(422)
-//                                 .setHeader('content-type', 'application/json')
-//                                 .send({ error: "Returned parameter must be either 'true' or 'false'!!" });
-//                             transaction.rollback((err) => { // ROLLBACK
-//                                 if (err) console.log(`error: ${err}`)
-//                             });
-//                         } else {
-
-//                             const parameters = [
-//                                 posted_loan.checkout ?? x.Checkout,
-//                                 posted_loan.due ?? x.Due,
-//                                 posted_loan.returned ?? x.returned,
-//                                 loanId
-//                             ];
-
-//                             transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
-
-//                                 if (errorTransaction) {
-//                                     if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
-//                                         transaction.rollback((err) => { // ROLLBACK
-//                                             if (err) console.log(`error: ${err}`);
-//                                         });
-//                                         transaction.rollback((err) => { // ROLLBACK
-//                                             if (err) console.log(`error: ${err}`);
-//                                         });
-//                                         res.status(409)
-//                                             .setHeader('content-type', 'application/json')
-//                                             .send({ error: `Contraint Error | ${errorTransaction.message}` })
-//                                     }
-//                                     else {
-//                                         transaction.rollback((err) => { // ROLLBACK
-//                                             if (err) console.log(`error: ${err}`);
-//                                         });
-//                                         res.status(500)
-//                                             .setHeader('content-type', 'application/json')
-//                                             .send({ errorTransaction })
-//                                     }
-//                                 }
-//                                 else {
-//                                     transaction.commit((errorCommit) => { // COMMIT
-//                                         if (err) console.log(`error: ${errorCommit}`);
-//                                     });
-
-//                                     res.status(200)
-//                                         .setHeader('content-type', 'application/json')
-//                                         .send({ message: "Loan updated", id: this.lastID });
-//                                 }
-
-//                             });
-//                             transaction.commit((errorCommit) => { // COMMIT
-//                                 if (err) console.log(`error: ${errorCommit}`);
-//                             });
-
-//                         }
-
-//                     }
-
-
-//                     else {
-
-//                         const parameters = [
-//                             posted_loan.checkout ?? x.Checkout,
-//                             posted_loan.due ?? x.Due,
-//                             _functions.isTrue([posted_loan.returned.toString().trim().toLowerCase()]) ?? x.returned,
-//                             loanId
-//                         ];
-
-//                         transaction.run(`UPDATE Loans SET Checkout = ?, Due = ?, Returned = ? WHERE id=?`, parameters, (errorTransaction) => {
-
-//                             if (errorTransaction) {
-//                                 if (errorTransaction.code == 'SQLITE_CONSTRAINT') {
-//                                     transaction.rollback((err) => { // ROLLBACK
-//                                         if (err) console.log(`error: ${err}`);
-//                                     });
-//                                     transaction.rollback((err) => { // ROLLBACK
-//                                         if (err) console.log(`error: ${err}`);
-//                                     });
-//                                     res.status(409)
-//                                         .setHeader('content-type', 'application/json')
-//                                         .send({ error: `Contraint Error | ${errorTransaction.message}` })
-//                                 }
-//                                 else {
-//                                     transaction.rollback((err) => { // ROLLBACK
-//                                         if (err) console.log(`error: ${err}`);
-//                                     });
-//                                     res.status(500)
-//                                         .setHeader('content-type', 'application/json')
-//                                         .send({ errorTransaction })
-//                                 }
-//                             }
-//                             else {
-//                                 transaction.commit((errorCommit) => { // COMMIT
-//                                     if (err) console.log(`error: ${errorCommit}`);
-//                                 });
-
-//                                 res.status(200)
-//                                     .setHeader('content-type', 'application/json')
-//                                     .send({ message: "Loan updated", id: this.lastID });
-//                             }
-
-//                         });
-//                         transaction.commit((errorCommit) => { // COMMIT
-//                             if (err) console.log(`error: ${errorCommit}`);
-//                         });
-//                     }
-
-//                 }
-
-//             });
-
-//         });
-
-//     }
-// };
 
 function UpdateLoanValues(res, transaction, parameters, err) {
 
@@ -1349,7 +842,7 @@ const EditLoan = (req, res) => {
                             }
                             else if ((posted_loan.due) > x.Checkout) {
                                 var dueDate = new Date(posted_loan.due);
-                                var checkoutDate = new Date( x.Checkout);
+                                var checkoutDate = new Date(x.Checkout);
                                 const diffTime = Math.abs(dueDate - checkoutDate);
                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -1449,18 +942,18 @@ const EditLoan = (req, res) => {
 
 
                         }
-                        else   if (posted_loan.due == undefined) {
-                            
+                        else if (posted_loan.due == undefined) {
+
                             if (posted_loan.returned == null) {
-                                 _functions.sendResponse(422, res, 'returned field can not bet null.');
-                                    transaction.rollback((err0) => { // ROLLBACK
-                                        if (err) console.log(`error: ${err}`);
-                                    });
+                                _functions.sendResponse(422, res, 'returned field can not bet null.');
+                                transaction.rollback((err0) => { // ROLLBACK
+                                    if (err) console.log(`error: ${err}`);
+                                });
                             }
                             else if (posted_loan.returned != undefined) {
 
                                 // check if its empty strings
-                                if (_functions.isBlank(posted_loan.returned) || posted_loan.returned ==null) {
+                                if (_functions.isBlank(posted_loan.returned) || posted_loan.returned == null) {
                                     _functions.sendResponse(422, res, 'returned field can not be empty strings.');
                                     transaction.rollback((err0) => { // ROLLBACK
                                         if (err) console.log(`error: ${err}`);

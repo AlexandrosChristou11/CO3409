@@ -1,10 +1,10 @@
 
 function isBlank(str) {
-    return (!str || /^\s*$/.test(str));
+    return (!str || /^\s*$/.test(str) || str == null);
 }
 
 function isTrue(value) {
-    return  (value == 'true');
+    return  (value == 'true' || value == true);
 }
 
  function isValidDate(date) {
@@ -21,15 +21,15 @@ function isTrue(value) {
 
 
 
-async function isDateEmpty(date, res) {
+function isDateEmpty(date, res) {
 
     var x = new Date(date);
 
     // check if date is not empty
     if (date.toString().trim() == '') {
-        return await false;
+        return  false;
     }
-    return await true;
+    return true;
 
 }
 
@@ -37,8 +37,8 @@ async function isDateEmpty(date, res) {
 // --------------------------
 //      API RESPONSES 
 // --------------------------
-async function sendResponse(responseCode ,res, message) {
-    await res.status(responseCode)
+ function sendResponse(responseCode ,res, message) {
+     res.status(responseCode)
         .setHeader('content-type', 'application/json')
         .send({ message }); // resource not found
 }

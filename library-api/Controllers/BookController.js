@@ -26,14 +26,35 @@ const AddNewBook = (req, res) => {
 
     if (!posted_book || !posted_book.Authors || !posted_book.Title || !posted_book.ISBN || !posted_book.Year
         || !posted_book.Loanable || !posted_book.Quantity) {
-        res.status(422) // bad request
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Invalid Book format !!` });
+        _functions.sendResponse(422, res, `Book attributes must be defined!`);
 
-    } else {
+    }
+    else if (_functions.isBlank(posted_book.Authors) || _functions.isBlank(posted_book.Title)
+        || _functions.isBlank(posted_book.ISBN) || _functions.isBlank(posted_book.Year)
+        || _functions.isBlank(posted_book.Loanable) || _functions.isBlank(posted_book.Quantity)) {
+        _functions.sendResponse(422, res, `Book attributes can not be null or empty!`);
+    }
+    else if (!Number.isInteger(posted_book.Year)) {
+        _functions.sendResponse(422, res, `Year must be an integer.`);
+    }
+    else if (!Number.isInteger(posted_book.Quantity)) {
+        _functions.sendResponse(422, res, `Quantity must be an integer`);
+    }
+    else if (posted_book.Quantity < 1) {
+        _functions.sendResponse(422, res, `Quantity must be at least 1.`);
+    }
+    else if (
+        (posted_book.Loanable.toString().trim().toLowerCase() != "true" && posted_book.Loanable.toString().trim().toLowerCase() != "false")
+    ) {
+        _functions.sendResponse(422, res, `Loanable must be either 'true' or 'false'`);
+    }
+
+
+
+    else {
 
         db.run('INSERT INTO Books (Authors, Title, ISBN, Year, Loanable, Quantity) VALUES (?,?,?,?,?,?)',
-            [posted_book.Authors, posted_book.Title, posted_book.ISBN, posted_book.Year, posted_book.Loanable, posted_book.Quantity],
+            [posted_book.Authors.toLowerCase(), posted_book.Title.toLowerCase(), posted_book.ISBN.toLowerCase(), posted_book.Year, posted_book.Loanable, posted_book.Quantity],
             function (error) {
 
                 if (error) {
@@ -88,23 +109,17 @@ const GetBooks = (req, res) => {
 // app.get('/library/book/:id',
 const GetBooksById = (req, res) => {
     const { id } = req.params;
-    db.get('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?', [id.trim()], (err, rows) => {
+
+    db.get('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?', [id.toString().trim()], (err, rows) => {
         if (err) {
-            console.error('Problem while querying database: ' + err);
-            res.status(500) // internal server error ..
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Problem while querying database" });
+            _functions.sendResponse(500, res, `ERROR || SERVER`)
         }
 
-        if (isNaN(id) || _functions.isBlank(id)) {
-            res.status(422)
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Book id is of invalid format" });
+        if (isNaN(parseInt(id)) || _functions.isBlank(id)) {
+            _functions.sendResponse(422, res, `Book Id must be an Integer`);
         } else
             if (!rows) {
-                res.status(404)
-                    .setHeader('content-type', 'application/json')
-                    .send({ error: "Book with id `${id}` was not found .." });
+                _functions.sendResponse(404, res, `Book with Id: ${id} was not found ..`);
             }
             else {
                 res.status(200)
@@ -122,26 +137,18 @@ const GetBooksById = (req, res) => {
 
 const GetBookByTitleQuery = (req, res) => {
     let title = req.query.Title;      // extract 'title' from request
-    let param = '%' + title + '%';
+    let param = '%' + title.trim().toLowerCase() + '%';
     var books = [];
     db.all('SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE Title LIKE ?', param, (err, rows) => {
 
-        console.log(`PARAMETER TITLE: ${title}`);
         if (err) {
-            console.error('Problem while querying database: ' + err);
-            res.status(500) // internal server error ..
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Problem while querying database" });
+            _functions.sendResponse(500, res, `ERROR | SERVER`)
         }
         else if (_functions.isBlank(title)) {
-            res.status(422)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Book Title ${title} is of invalid format` });
+            _functions.sendResponse(422, res, `Please use a valid format for a book title.`);
         }
         else if (rows.length == 0) {
-            res.status(404)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Book with Title ${title} was not found ..` });
+            _functions.sendResponse(404, res, `No books found ..`);
         }
         else {
             rows.forEach(row =>
@@ -160,38 +167,43 @@ const GetBookByTitleQuery = (req, res) => {
 
 
 // PUT: {local}/library/book/edit/{:id}
-//app.put('/library/book/edit/:id', 
 const EditBook = (req, res) => {
     const { id } = req.params; // get id from params
     const posted_book = req.body;           // submitted book
 
     if (!id || _functions.isBlank(id) || isNaN(id)) {
-        res.status(422)
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Id is of invalid format` }); // resource not found
+        _functions.sendResponse(422, res, `Please use a valid format for a book id.`);
     } else {
         db.get(`SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?`, [id], (err, row) => {
 
 
             if (err) {
-                res.status(500)
-                    .setHeader('content-type', 'application/json')
-                    .send({ error: "Server error: " + err });
+                _functions.sendResponse(500, res, `SERVER || ERROR`);
             }
             else {
 
-                if ((posted_book.Quantity != null && (posted_book.Quantity <= row.Quantity || isNaN(posted_book.Quantity)))) {
-                    res.status(422)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: `Invalid value of Quantity` }); // resource not found
+                if ((posted_book.Quantity != null && (posted_book.Quantity <= row.Quantity || !Number.isInteger(posted_book.Quantity)))) {
+                    _functions.sendResponse(422, res, `Please use a valid format for quantity.`);
                 }
                 else if ((posted_book.Authors && _functions.isBlank(posted_book.Authors)) ||
                     (posted_book.Title && _functions.isBlank(posted_book.Title)) ||
                     (posted_book.Year && _functions.isBlank(posted_book.Year)) ||
-                    (posted_book.Loanable && _functions.isBlank(posted_book.Loanable) || posted_book.Loanable != false && posted_book.Loanable != true)) {
-                    res.status(422)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: `Invalid structure of JSON Parameters` }); // resource not found
+                    (posted_book.Loanable && _functions.isBlank(posted_book.Loanable))) {
+                    _functions.sendResponse(422, res, `Field can not be empty`);
+                }
+                else if (posted_book.Year && !Number.isInteger(posted_book.Year)) {
+                    _functions.sendResponse(422, res, `Year must be an integer.`);
+                }
+                else if (posted_book.Quantity && !Number.isInteger(posted_book.Quantity)) {
+                    _functions.sendResponse(422, res, `Quantity must be an integer`);
+                }
+                else if (posted_book.Quantity && posted_book.Quantity < 1) {
+                    _functions.sendResponse(422, res, `Quantity must be at least 1.`);
+                }
+                else if (
+                    (posted_book.Loanable && posted_book.Loanable.toString().trim().toLowerCase() != "true" && posted_book.Loanable.toString().trim().toLowerCase() != "false")
+                ) {
+                    _functions.sendResponse(422, res, `Loanable must be either 'true' or 'false'`);
                 }
 
 
@@ -201,15 +213,22 @@ const EditBook = (req, res) => {
                         .send({ error: "Book not found for id: " + id }); // resource not found
                 }
                 else { // book found, let's update it
+                    var loanableField;
+                    if (posted_book.Loanable == null || posted_book.Loanable == undefined) {
+                        loanableField = row.Loanable
 
+                    } else {
+                        loanableField = _functions.isTrue(posted_book.Loanable);
+                    }
                     const parameters = [posted_book.Authors ?? row.Authors,
                     posted_book.Title ?? row.Title,
                     posted_book.ISBN ?? row.ISBN,
                     posted_book.Year ?? row.Year,
                     posted_book.Quantity ?? row.Quantity,
+                        loanableField,
                         id];
 
-                    db.run(`UPDATE Books SET Authors = ?, Title = ?, ISBN = ?, Year = ?, Quantity = ? WHERE ID=?`, parameters, (err) => {
+                    db.run(`UPDATE Books SET Authors = ?, Title = ?, ISBN = ?, Year = ?, Quantity = ?, Loanable = ? WHERE ID=?`, parameters, (err) => {
                         if (err) {
                             if (err.code === 'SQLITE_CONSTRAINT') {
                                 res.status(409) // resource already exists

@@ -1,8 +1,8 @@
 const sqlite3 = require('sqlite3').verbose();       // include sqlite library ..
 
 
-let db = new sqlite3.Database('./db/library.db', (err)=> {
-    if (err){
+let db = new sqlite3.Database('./db/library.db', (err) => {
+    if (err) {
         return console.log(err.message);
     }
     console.log('Connected to the file-based SQlite database ..');
@@ -17,12 +17,17 @@ const AddNewStudent = (req, res) => {
     const posted_student = req.body; // submitted module - picked from body
 
 
-if (!posted_student || !posted_student.Name || !posted_student.YOB || _functions.isBlank(posted_student.Name) || isNaN(posted_student.YOB)) {
-        res.status(422) // bad request
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Invalid Student format !!` });
+    if (!posted_student || !posted_student.Name || !posted_student.YOB || _functions.isBlank(posted_student.Name) || _functions.isBlank(posted_student.YOB)) {
+        _functions.sendResponse(422, res, `Student attributes can not be null or empty!`);
+    }
+    else if (!Number.isInteger(posted_student.YOB)) {
+        _functions.sendResponse(422, res, `YOB must be an integer.`);
+    }
+    else if (!isNaN(posted_student.Name)) {
+        _functions.sendResponse(422, res, `Student name can not be an number.`);
+    }
 
-    } else {
+    else {
 
         db.run('INSERT INTO Students (Name, YOB) VALUES (?,?)',
             [posted_student.Name, posted_student.YOB],
@@ -55,7 +60,7 @@ if (!posted_student || !posted_student.Name || !posted_student.YOB || _functions
 
 
 // GET: {local}/library/students
-const GetStudents =  (req, res) => {
+const GetStudents = (req, res) => {
     var books = [];
     db.all('SELECT ID, Name, YOB from Students', (err, rows) => {
         if (err) {
@@ -77,8 +82,8 @@ const GetStudents =  (req, res) => {
 }
 
 // GET: {local}/library/student/:id
-const GetStudentById =  (req, res) => {
-    const  {id}  = req.params;
+const GetStudentById = (req, res) => {
+    const { id } = req.params;
     db.get('SELECT ID, Name, YOB from Students WHERE ID = ?', [id.trim()], (err, rows) => {
         console.log(`ID: ${id}`);
         if (err) {
@@ -92,17 +97,17 @@ const GetStudentById =  (req, res) => {
             res.status(422)
                 .setHeader('content-type', 'application/json')
                 .send({ error: "Student id is of invalid format" });
-        } 
+        }
         else if (!rows) {
-                res.status(404)
-                    .setHeader('content-type', 'application/json')
-                    .send({ error: `Student with id: ${id} was not found ..` });
-            }
-            else {
-                res.status(200)
-                    .setHeader('content-type', 'application/json')
-                    .send({ id: rows.id, Name: rows.Name, YOB: rows.YOB });
-            }
+            res.status(404)
+                .setHeader('content-type', 'application/json')
+                .send({ error: `Student with id: ${id} was not found ..` });
+        }
+        else {
+            res.status(200)
+                .setHeader('content-type', 'application/json')
+                .send({ id: rows.id, Name: rows.Name, YOB: rows.YOB });
+        }
 
     });
 
@@ -118,23 +123,17 @@ const GetStudentByNameQuery = (req, res) => {
 
         if (err) {
             console.error('Problem while querying database: ' + err);
-            res.status(500) // internal server error ..
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Problem while querying database" });
+            _functions.sendResponse(500, res, `SERVER || ERROR`);
         }
         else if (_functions.isBlank(name)) {
-            res.status(422)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Student name is of invalid format` });
+            _functions.sendResponse(422, res, `Student name can not be empty.`);
         }
         else if (rows.length == 0) {
-            res.status(404)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Student with name: ${name},  was not found ..` });
+            _functions.sendResponse(404, res, `Student does not exist.`);
         }
         else {
             rows.forEach(row =>
-                students.push({ id: row.id, Name: row.Name, YOB: row.YOB,  }));
+                students.push({ id: row.id, Name: row.Name, YOB: row.YOB, }));
 
             res.status(200)
                 .setHeader('content-type', 'application/json')
@@ -153,10 +152,10 @@ const EditStudent = (req, res) => {
     const posted_student = req.body;           // submitted book
 
     if (!id || _functions.isBlank(id) || isNaN(id)) {
-        res.status(422)
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Id is of invalid format` }); // resource not found
-    } else {
+        _functions.sendResponse(422, res, `Please provide a valid format for student id.`);
+    }
+   
+    else {
         db.get(`SELECT ID, Name, YOB from Students where ID=?`, [id], (err, row) => {
 
             if (err) {
@@ -165,19 +164,18 @@ const EditStudent = (req, res) => {
                     .send({ error: "Server error: " + err });
             }
             else {
-            
-                if ((posted_student.Name && _functions.isBlank(posted_student.Name)) ||
-                    (posted_student.YOB && _functions.isBlank(posted_student.YOB))) {
-                    res.status(422)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: `Invalid structure of JSON Parameters` }); // resource not found
+
+                if ((posted_student.Name && _functions.isBlank(posted_student.Name) ||posted_student.Name == "" ) ||
+                    (posted_student.YOB && _functions.isBlank(posted_student.YOB) || posted_student.YOB == "")) {
+                    _functions.sendResponse(422, res, `Update values can not be empty`);
+                } 
+                else if ( isNaN(posted_student.YOB)  && !Number.isInteger(posted_student.YOB)) {
+                    _functions.sendResponse(422, res, `Year must be an integer.`);
                 }
 
 
                 else if (!row) { // true if 'student' not set
-                    res.status(404)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: "Student not found for id: " + id }); // resource not found
+                    _functions.sendResponse(404, res, `Student not found ..`);
                 }
                 else { // student found, let's update it
 
@@ -211,4 +209,4 @@ const EditStudent = (req, res) => {
 
 
 
-module.exports = {AddNewStudent, GetStudents, GetStudentById, GetStudentByNameQuery, EditStudent};
+module.exports = { AddNewStudent, GetStudents, GetStudentById, GetStudentByNameQuery, EditStudent };

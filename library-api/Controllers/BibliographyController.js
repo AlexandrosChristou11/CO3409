@@ -14,64 +14,80 @@ const _functions = require('../Generic Methods/GlobalFunctions'); // import the 
 
 // {POST}: localhost:3000/library/bibliography/add
 const AddNewBibliography = (req, res) => {
-    const posted_bib = req.body; // submitted module - picked from body
+    const posted_bib = req.body;         // submitted bibliography - picked from body
 
-    if (!posted_bib || !posted_bib.ModeleCODE || !posted_bib.BookID) {
+    if (!posted_bib || !posted_bib.ModuleCODE || !posted_bib.BookID) {
         _functions.sendResponse(409, res, `Invalid format of parameters`);
     }
-    else if (_functions.isBlank(posted_bib.ModeleCODE)) {
+    else if (_functions.isBlank(posted_bib.ModuleCODE)) {
         _functions.sendResponse(409, res, `Module code can not be null`);
     }
     else if (isNaN(posted_bib.BookID)) {
         _functions.sendResponse(409, res, `Bookd Id must be an integer ..`)
     }
+    else if (_functions.isBlank(posted_bib.BookID)) {
+        _functions.sendResponse(409, res, `Bookd Id can not be empty ..`)
+    }
     else {
 
-        db.run(`SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ? AND BookID = ?`,
-            [posted_bib.ModeleCODE, posted_bib.BookID], (err, x => {
+        db.get(`SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ? AND BookID = ?`,
+            [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID], (err, x) => {
 
                 // no such record exist .. go and add the new bibliography
                 if (!x) {
-                    
-                    // check if bood id and module exist
-                    db.run(`SELECT  Code, Name from Modules WHERE Code = ? `, [posted_bib.ModeleCODE], (e, k =>{
+
+                    // check if book id  exist
+                    db.get(`SELECT  Code, Name from Modules WHERE Code = ? `, [posted_bib.ModuleCODE.trim().toLowerCase()], (e, k) => {
                         // no such entry exist ..
-                        if (!k){
-                            _functions.sendResponse(409, res, `Module Code with code: ${[posted_bib.ModeleCODE]} does not exist..`);
+                        if (!k) {
+                            _functions.sendResponse(409, res, `Module Code with code: ${[posted_bib.ModuleCODE]} does not exist..`);
+                        }
+                        // book id exists, go and look for module code..
+                        else {
+                            db.get(`SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID =?`, posted_bib.BookID, (error, rows) => {
+
+                                // no such  module exist ..
+                                if (!rows) {
+                                    _functions.sendResponse(409, res, `book with id: ${[posted_bib.BookID]} does not exist..`);
+                                }
+                                else {
+                                    db.run('INSERT INTO Bibliographies (ModuleCODE, BookID) VALUES (?, ?)',
+                                        [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID.trim()], function (error) {
+                                            if (error) {
+                                                if (error.code == 'SQLITE_CONSTRAINT') {
+                                                    _functions.sendResponse(409, res, `Constraint Error | ${error.message}`);
+                                                }
+                                                else {
+                                                    _functions.sendResponse(500, res, error.message);
+                                                }
+                                            }
+                                            else {
+                                                _functions.sendResponse(200, res, `Bibliography added.`);
+                                            }
+                                        });
+                                }
+                            });
                         }
 
-                    }));
+                    });
 
-                    db.run('INSERT INTO Bibliographies (ModuleCODE, BookID) VALUES (?, ?)',
-                        [posted_bib.ModeleCODE, posted_bib.BookID], function(error){
-                            if (error){
-                                if (error.code == 'SQLITE_CONSTRAINT'){
-                                    _functions.sendResponse(409, res, `Constraint Error | ${error.message}`);
-                                }
-                                else{
-                                    _functions.sendResponse(500, res, error.message);
-                                }
-                            }
-                            else{
-                                _functions.sendResponse(200, res, `Bibliography added.`);
-                            }
-                        });
+
                 }
                 // record exist.. returned error message
-                else if (x){
-                    _functions.sendResponse(404)
+                else if (x) {
+                    _functions.sendResponse(404, res, `OK!`)
                 }
-            }))
+            })
 
     }
 };
 
 
 
-// GET: {local}/library/students
-const GetStudents = (req, res) => {
-    var books = [];
-    db.all('SELECT ID, Name, YOB from Students', (err, rows) => {
+// GET: {local}/library/bibliographies
+const GetBibliographies = (req, res) => {
+    var bib = [];
+    db.all('SELECT ID, ModuleCODE, BookId from Bibliographies', (err, rows) => {
         if (err) {
             console.error('Problem while querying database: ' + err);
             res.status(500) // internal server error ..
@@ -81,148 +97,144 @@ const GetStudents = (req, res) => {
         }
 
         rows.forEach(row =>
-            books.push({ id: row.id, Name: row.Name, YOB: row.YOB }));
+            bib.push({ id: row.id, ModuleCODE: row.ModuleCODE, BookID: row.BookID }));
         res.status(200)
             .setHeader('content-type', 'application/json')
-            .send(books);
-
-    });
-
-}
-
-// GET: {local}/library/student/:id
-const GetStudentById = (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT ID, Name, YOB from Students WHERE ID = ?', [id.trim()], (err, rows) => {
-        console.log(`ID: ${id}`);
-        if (err) {
-            console.error('Problem while querying database: ' + err);
-            res.status(500) // internal server error ..
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Problem while querying database" });
-        }
-
-        if (isNaN(id) || _functions.isBlank(id)) {
-            res.status(422)
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Student id is of invalid format" });
-        }
-        else if (!rows) {
-            res.status(404)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Student with id: ${id} was not found ..` });
-        }
-        else {
-            res.status(200)
-                .setHeader('content-type', 'application/json')
-                .send({ id: rows.id, Name: rows.Name, YOB: rows.YOB });
-        }
+            .send(bib);
 
     });
 
 }
 
 
-// GET: {local}/library/student?Name= {name}
-const GetStudentByNameQuery = (req, res) => {
-    let name = req.query.Name;      // extract 'name' from request
-    let param = '%' + name + '%';
-    var students = [];
-    db.all('SELECT ID, Name, YOB from Students WHERE Name LIKE ?', param, (err, rows) => {
 
-        if (err) {
-            console.error('Problem while querying database: ' + err);
-            res.status(500) // internal server error ..
-                .setHeader('content-type', 'application/json')
-                .send({ error: "Problem while querying database" });
-        }
-        else if (_functions.isBlank(name)) {
-            res.status(422)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Student name is of invalid format` });
-        }
-        else if (rows.length == 0) {
-            res.status(404)
-                .setHeader('content-type', 'application/json')
-                .send({ error: `Student with name: ${name},  was not found ..` });
-        }
-        else {
-            rows.forEach(row =>
-                students.push({ id: row.id, Name: row.Name, YOB: row.YOB, }));
 
-            res.status(200)
-                .setHeader('content-type', 'application/json')
-                .send(students);
-        }
+// GET: {local}/library/bibliographies/get/ :ModuleCODE
+const GetBibliographiesByModuleCode = (req, res) => {
+    const { ModuleCODE } = req.params;
+    var bib = [];
+    if (!ModuleCODE || _functions.isBlank(ModuleCODE)) {
+        _functions.sendResponse(409, res, `Invalid format of parameters`);
+    }
+    else {
 
-    });
+        // check if module code exist ..
+        db.get('SELECT Code, Name from Modules WHERE Code = ? ', [ModuleCODE.trim().toLowerCase()], (e, x) => {
 
+            // module code does not exist ..
+            if (!x) {
+                _functions.sendResponse(409, res, `Module code ${ModuleCODE} does not exist!!`);
+            }
+            else {
+                // check for bibliographies ..
+                db.all('SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ?', [ModuleCODE.trim().toLowerCase()], (err, rows) => {
+
+                    if (err) {
+                        console.error('Problem while querying database: ' + err);
+                        _functions.sendResponse(500, res, `SERVER ERROR || ${err.message}`)
+                    }
+
+                    else if (!rows) {
+                        _functions.sendResponse(404, res, `No bibliography exists with module code: ${ModuleCODE}`);
+                    }
+                    else {
+
+                        rows.forEach(row => {
+                            bib.push({ id: row.id, ModuleCODE: row.ModuleCODE, BookID: row.BookID })
+                        });
+
+                        res.status(200)
+                            .setHeader('content-type', 'application/json')
+                            .send(bib);
+                    }
+
+                });
+            }
+
+        });
+
+
+
+    }
 
 }
+
+
 
 
 // PUT: {local}/library/student/edit/{:id}
-const EditStudent = (req, res) => {
-    const { id } = req.params; // get id from params
-    const posted_student = req.body;           // submitted book
+const DeleteBibliography = (req, res) => {
+    const posted_bib = req.body;         // submitted bibliography - picked from body
 
-    if (!id || _functions.isBlank(id) || isNaN(id)) {
-        res.status(422)
-            .setHeader('content-type', 'application/json')
-            .send({ error: `Id is of invalid format` }); // resource not found
-    } else {
-        db.get(`SELECT ID, Name, YOB from Students where ID=?`, [id], (err, row) => {
-
-            if (err) {
-                res.status(500)
-                    .setHeader('content-type', 'application/json')
-                    .send({ error: "Server error: " + err });
-            }
-            else {
-
-                if ((posted_student.Name && _functions.isBlank(posted_student.Name)) ||
-                    (posted_student.YOB && _functions.isBlank(posted_student.YOB))) {
-                    res.status(422)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: `Invalid structure of JSON Parameters` }); // resource not found
-                }
-
-
-                else if (!row) { // true if 'student' not set
-                    res.status(404)
-                        .setHeader('content-type', 'application/json')
-                        .send({ error: "Student not found for id: " + id }); // resource not found
-                }
-                else { // student found, let's update it
-
-                    const parameters = [
-                        posted_student.Name ?? row.Name,
-                        posted_student.YOB ?? row.YOB,
-                        id];
-
-                    db.run(`UPDATE Students SET Name = ?, YOB = ? WHERE ID=?`, parameters, (err) => {
-                        if (err) {
-                            if (err.code === 'SQLITE_CONSTRAINT') {
-                                res.status(409) // resource already exists
-                                    .setHeader('content-type', 'application/json')
-                                    .send({ error: `Constraint error: ${err}` });
-                            } else { // other server-side error
-                                res.status(500)
-                                    .setHeader('content-type', 'application/json')
-                                    .send({ error: "Server error: " + err });
-                            }
-                        } else {
-                            res.status(200)
-                                .setHeader('content-type', 'application/json')
-                                .send({ message: `Student with id ${id} was updated!` });
-                        }
-                    });
-                }
-            }
-        });
+    if (!posted_bib || !posted_bib.ModuleCODE || !posted_bib.BookID) {
+        _functions.sendResponse(409, res, `Invalid format of parameters`);
     }
+    else if (_functions.isBlank(posted_bib.ModuleCODE)) {
+        _functions.sendResponse(409, res, `Module code can not be null`);
+    }
+    else if (isNaN(posted_bib.BookID)) {
+        _functions.sendResponse(409, res, `Bookd Id must be an integer ..`)
+    }
+    else if (_functions.isBlank(posted_bib.BookID)) {
+        _functions.sendResponse(409, res, `Bookd Id can not be null ..`)
+    }
+    else {
+        // Check if bibliography exist ..
+        db.get(`SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ? AND BookID = ?`,
+            [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID], (err, x) => {
+
+                // no such record exist ..  check whether book id or module code exists ..
+                if (!x) {
+
+                    // check if book id  exist
+                    db.get(`SELECT  Code, Name from Modules WHERE Code = ? `, [posted_bib.ModuleCODE.trim().toLowerCase()], (e, k) => {
+                        // no such entry exist ..
+                        if (!k) {
+                            _functions.sendResponse(409, res, `Module Code with code: ${[posted_bib.ModuleCODE]} does not exist..`);
+                        }
+                        // book id exists, go and look for module code..
+                        else {
+                            db.get(`SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID =?`, posted_bib.BookID, (error, rows) => {
+
+                                // no such  module exist ..
+                                if (!rows) {
+                                    _functions.sendResponse(409, res, `book with id: ${[posted_bib.BookID]} does not exist..`);
+                                }
+                                else{
+                                    _functions.sendResponse(409, res, `Bibliography with module code: ${posted_bib.ModuleCODE} & book id: ${posted_bib.BookID} does not exist ..`);
+                                }
+                            });
+                        }
+
+                    });
+
+
+                }
+                // record exist.. returned error message
+                else if (x) {
+
+                    db.run('DELETE FROM Bibliographies WHERE ModuleCODE = ? and BookID = ?',
+                        [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID], function (error) {
+                            if (error) {
+                                if (error.code == 'SQLITE_CONSTRAINT') {
+                                    _functions.sendResponse(409, res, `Constraint Error | ${error.message}`);
+                                }
+                                else {
+                                    _functions.sendResponse(500, res, error.message);
+                                }
+                            }
+                            else {
+                                _functions.sendResponse(200, res, `Bibliography deleted!`);
+                            }
+                        });
+
+                }
+            })
+
+    }
+
 };
 
 
 
-module.exports = { AddNewBibliography, GetStudents, GetStudentById, GetStudentByNameQuery, EditStudent };
+module.exports = { AddNewBibliography, GetBibliographies, GetBibliographiesByModuleCode, DeleteBibliography };

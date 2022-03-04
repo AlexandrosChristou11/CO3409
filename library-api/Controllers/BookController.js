@@ -174,16 +174,22 @@ const EditBook = (req, res) => {
     if (!id || _functions.isBlank(id) || isNaN(id)) {
         _functions.sendResponse(422, res, `Please use a valid format for a book id.`);
     } else {
-        db.get(`SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?`, [id], (err, row) => {
+        db.get(`SELECT ID, Authors, Title, ISBN, Year, Loanable, Quantity from Books WHERE ID=?`, id, (err, row) => {
 
 
             if (err) {
                 _functions.sendResponse(500, res, `SERVER || ERROR`);
             }
+            else if (!row){
+                _functions.sendResponse(404, res, `Book not found`);
+            }
             else {
 
-                if ((posted_book.Quantity != null && (posted_book.Quantity <= row.Quantity || !Number.isInteger(posted_book.Quantity)))) {
+                if ((posted_book.Quantity != null &&  !Number.isInteger(posted_book.Quantity))) {
                     _functions.sendResponse(422, res, `Please use a valid format for quantity.`);
+                }
+                else if (posted_book.Quantity != null && (posted_book.Quantity <= row.Quantity) ){
+                    _functions.sendResponse(422, res, `Quantity can only be increased!`);
                 }
                 else if ((posted_book.Authors && _functions.isBlank(posted_book.Authors)) ||
                     (posted_book.Title && _functions.isBlank(posted_book.Title)) ||
@@ -204,6 +210,15 @@ const EditBook = (req, res) => {
                     (posted_book.Loanable && posted_book.Loanable.toString().trim().toLowerCase() != "true" && posted_book.Loanable.toString().trim().toLowerCase() != "false")
                 ) {
                     _functions.sendResponse(422, res, `Loanable must be either 'true' or 'false'`);
+                }
+                else if ( posted_book.Authors && _functions.isBlank(posted_book.Authors)){
+                    _functions.sendResponse(422, res, `Authors can not be empty'`);
+                }
+                else if ( posted_book.Title && _functions.isBlank(posted_book.Title)){
+                    _functions.sendResponse(422, res, `Title can not be empty'`);
+                }
+                else if ( posted_book.ISBN && _functions.isBlank(posted_book.ISBN)){
+                    _functions.sendResponse(422, res, `ISBN can not be empty'`);
                 }
 
 

@@ -56,7 +56,7 @@ const AddNewLoan = (req, res) => {
             }
 
             // Check Due (date) format
-            if (dateDue >= currentDate) {
+            else if (dateDue >= currentDate) {
                 const diffTime = Math.abs(dateDue) - currentDate;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 if (diffDays > 90) {
@@ -167,9 +167,7 @@ const AddNewLoan = (req, res) => {
                                                                     }
 
                                                                 });
-                                                                transaction.commit((errorCommit) => { // COMMIT
-                                                                    if (err) console.log(`error: ${errorCommit}`);
-                                                                });
+                                                               
 
                                                             }
 
@@ -638,7 +636,7 @@ const EditLoan = (req, res) => {
                 var isCheckoutValid = _functions.isValidDate(posted_loan.checkout)
                 // Loan id does not exist in the dataset ..
                 if (!x || loanId == 0) {
-                    _functions.sendResponse(422, res, "Loan Id does not exist ..")
+                    _functions.sendResponse(404, res, "Loan Id does not exist ..")
                     transaction.rollback((err) => { // ROLLBACK
                         if (err) console.log(`error: ${err}`);
                     });
@@ -944,7 +942,7 @@ const EditLoan = (req, res) => {
                         }
                         else if (posted_loan.due == undefined) {
 
-                            if (posted_loan.returned == null) {
+                            if (  posted_loan.returned == null) {
                                 _functions.sendResponse(422, res, 'returned field can not bet null.');
                                 transaction.rollback((err0) => { // ROLLBACK
                                     if (err) console.log(`error: ${err}`);

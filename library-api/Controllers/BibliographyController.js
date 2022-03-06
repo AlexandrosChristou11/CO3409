@@ -29,7 +29,7 @@ const AddNewBibliography = (req, res) => {
         _functions.sendResponse(409, res, `Bookd Id can not be empty ..`)
     }
     else {
-
+        db.get("PRAGMA foreign_keys = ON");
         db.get(`SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ? AND BookID = ?`,
             [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID], (err, x) => {
 
@@ -40,7 +40,7 @@ const AddNewBibliography = (req, res) => {
                     db.get(`SELECT  Code, Name from Modules WHERE Code = ? `, [posted_bib.ModuleCODE.trim().toLowerCase()], (e, k) => {
                         // no such entry exist ..
                         if (!k) {
-                            _functions.sendResponse(409, res, `Module Code with code: ${[posted_bib.ModuleCODE]} does not exist..`);
+                            _functions.sendResponse(404, res, `Module Code with code: ${[posted_bib.ModuleCODE]} does not exist..`);
                         }
                         // book id exists, go and look for module code..
                         else {
@@ -48,7 +48,7 @@ const AddNewBibliography = (req, res) => {
 
                                 // no such  module exist ..
                                 if (!rows) {
-                                    _functions.sendResponse(409, res, `book with id: ${[posted_bib.BookID]} does not exist..`);
+                                    _functions.sendResponse(404, res, `book with id: ${[posted_bib.BookID]} does not exist..`);
                                 }
                                 else {
                                     db.run('INSERT INTO Bibliographies (ModuleCODE, BookID) VALUES (?, ?)',
@@ -75,7 +75,7 @@ const AddNewBibliography = (req, res) => {
                 }
                 // record exist.. returned error message
                 else if (x) {
-                    _functions.sendResponse(404, res, `OK!`)
+                    _functions.sendResponse(404, res, `RECORD NOT FOUND`)
                 }
             })
 
@@ -126,6 +126,7 @@ const GetBibliographiesByModuleCode = (req, res) => {
                 _functions.sendResponse(409, res, `Module code ${ModuleCODE} does not exist!!`);
             }
             else {
+                db.get("PRAGMA foreign_keys = ON");
                 // check for bibliographies ..
                 db.all('SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ?', [ModuleCODE.trim().toLowerCase()], (err, rows) => {
 
@@ -134,7 +135,7 @@ const GetBibliographiesByModuleCode = (req, res) => {
                         _functions.sendResponse(500, res, `SERVER ERROR || ${err.message}`)
                     }
 
-                    else if (!rows) {
+                    else if (rows.length == 0) {
                         _functions.sendResponse(404, res, `No bibliography exists with module code: ${ModuleCODE}`);
                     }
                     else {
@@ -180,6 +181,7 @@ const DeleteBibliography = (req, res) => {
     }
     else {
         // Check if bibliography exist ..
+        db.get("PRAGMA foreign_keys = ON");
         db.get(`SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ? AND BookID = ?`,
             [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID], (err, x) => {
 
@@ -212,6 +214,7 @@ const DeleteBibliography = (req, res) => {
                 }
                 // record exist.. returned error message
                 else if (x) {
+                    db.get("PRAGMA foreign_keys = ON");
 
                     db.run('DELETE FROM Bibliographies WHERE ModuleCODE = ? and BookID = ?',
                         [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID], function (error) {

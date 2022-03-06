@@ -95,7 +95,7 @@ const GetModuleById = (req, res) => {
             }
 
             else if (!rows) {
-                _functions.sendResponse(422, res, `Module with id: ${id} was not found ..`);
+                _functions.sendResponse(404, res, `Module with id: ${id} was not found ..`);
 
             }
             else {
@@ -129,7 +129,7 @@ const GetModuleByCode = (req, res) => {
             _functions.sendResponse(422, res, `Module code is not only numbers ..`);
         }
         else if (!rows) {
-            _functions.sendResponse(422, res, `Module with code: ${code} was not found ..`);
+            _functions.sendResponse(404, res, `Module with code: ${code} was not found ..`);
         }
         else {
             res.status(200)
@@ -204,6 +204,11 @@ const EditModule = (req, res) => {
                         .setHeader('content-type', 'application/json')
                         .send({ error: `Update values can not be empty` }); // resource not found
                 }
+                else if (!posted_module.Name){
+                    res.status(422)
+                    .setHeader('content-type', 'application/json')
+                    .send({ error: `Module name must be given` }); // resource not found
+                } 
 
 
                 else if (!row) { // true if 'module' not set

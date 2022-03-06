@@ -68,14 +68,18 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS Loans (
         id INTEGER not null PRIMARY KEY AUTOINCREMENT ,
         BookID INTEGER  not null, StudentID INTEGER  not null, Checkout DATE , Due DATE, Returned BOOLEAN NOT NULL DEFAULT 0,
+        
+        CONSTRAINT FK_BOOK_ID
         FOREIGN KEY (BookID) 
-         REFERENCES Book (id) 
+         REFERENCES Books (id) 
           ON DELETE CASCADE 
-          ON UPDATE NO ACTION,
+          ON UPDATE CASCADE,
+
+        CONSTRAINT FK_ST_ID
         FOREIGN KEY (StudentID) 
-         REFERENCES Student (id) 
+         REFERENCES Students (id) 
           ON DELETE CASCADE 
-          ON UPDATE NO ACTION
+          ON UPDATE CASCADE
         )` ,
     
     [], function (err) {
@@ -95,14 +99,16 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS Bibliographies (
         id INTEGER not null PRIMARY KEY AUTOINCREMENT ,
         ModuleCODE TEXT  not null, BookID INTEGER  not null,
+        CONSTRAINT FK_BOOKS
         FOREIGN KEY (BookID) 
-         REFERENCES Book (id) 
+         REFERENCES Books (id) 
           ON DELETE CASCADE 
-          ON UPDATE NO ACTION,
+          ON UPDATE CASCADE,
+          CONSTRAINT FK_MODULE_CODE
         FOREIGN KEY (ModuleCODE) 
-         REFERENCES Module (CODE) 
+         REFERENCES Modules (Code) 
           ON DELETE CASCADE 
-          ON UPDATE NO ACTION
+          ON UPDATE CASCADE
         )` ,
     
     [], function (err) {
@@ -114,7 +120,7 @@ db.serialize(() => {
 
 // db.serialize(() => {
 //     // create 'Loan' table if needed
-//     db.run(`DROP TABLE Modules` ,
+//     db.run(`DROP TABLE Bibliographies` ,
     
 //     [], function (err) {
 //         if (err) console.log(`error while deleting table 'students': ${err}`)

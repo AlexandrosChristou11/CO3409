@@ -184,6 +184,7 @@ const EditStudent = (req, res) => {
                         posted_student.YOB ?? row.YOB,
                         id];
 
+                    db.run("PRAGMA foreign_keys = ON");
                     db.run(`UPDATE Students SET Name = ?, YOB = ? WHERE ID=?`, parameters, (err) => {
                         if (err) {
                             if (err.code === 'SQLITE_CONSTRAINT') {

@@ -243,6 +243,7 @@ const EditBook = (req, res) => {
                         loanableField,
                         id];
 
+                    db.run("PRAGMA foreign_keys = ON");
                     db.run(`UPDATE Books SET Authors = ?, Title = ?, ISBN = ?, Year = ?, Quantity = ?, Loanable = ? WHERE ID=?`, parameters, (err) => {
                         if (err) {
                             if (err.code === 'SQLITE_CONSTRAINT') {

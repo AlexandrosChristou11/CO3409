@@ -120,7 +120,7 @@ db.serialize(() => {
 
 // db.serialize(() => {
 //     // create 'Loan' table if needed
-//     db.run(`DROP TABLE Bibliographies` ,
+//     db.run(`DROP TABLE Loans` ,
     
 //     [], function (err) {
 //         if (err) console.log(`error while deleting table 'students': ${err}`)

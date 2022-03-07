@@ -189,6 +189,7 @@ const EditModule = (req, res) => {
             .setHeader('content-type', 'application/json')
             .send({ error: `Module Code can not be empty` }); // resource not found
     } else {
+        db.run("PRAGMA foreign_keys = ON");
         db.get(`SELECT id, Code, Name from Modules WHERE Code = ?`, [code.trim().toLowerCase()], (err, row) => {
 
             if (err) {

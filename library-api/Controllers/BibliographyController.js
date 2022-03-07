@@ -29,7 +29,7 @@ const AddNewBibliography = (req, res) => {
         _functions.sendResponse(409, res, `Bookd Id can not be empty ..`)
     }
     else {
-        db.get("PRAGMA foreign_keys = ON");
+        
         db.get(`SELECT id, ModuleCODE, BookID FROM Bibliographies WHERE ModuleCODE = ? AND BookID = ?`,
             [posted_bib.ModuleCODE.trim().toLowerCase(), posted_bib.BookID], (err, x) => {
 
@@ -75,7 +75,7 @@ const AddNewBibliography = (req, res) => {
                 }
                 // record exist.. returned error message
                 else if (x) {
-                    _functions.sendResponse(404, res, `RECORD NOT FOUND`)
+                    _functions.sendResponse(200, res, `RECORD NOT FOUND`)
                 }
             })
 
